@@ -33,14 +33,23 @@ export class AuthController {
         message:
           'Usuario registrado exitosamente. Verifica tu email para confirmar.',
         userSub: result.UserSub,
-        generatedUsername: result.generatedUsername,
         codeDeliveryDetails: result.CodeDeliveryDetails,
       };
     } catch (error) {
+      console.error('Signup error details:', error); // Para depuración en logs
       if (error.name === 'UsernameExistsException') {
         throw new HttpException(
           'El email ya está registrado. Intenta con signin.',
           HttpStatus.CONFLICT,
+        );
+      }
+      if (
+        error.name === 'InvalidParameterException' ||
+        error.name === 'InvalidUserAttributeException'
+      ) {
+        throw new HttpException(
+          'Parámetros inválidos en el registro. Verifica el formato del email y password.',
+          HttpStatus.BAD_REQUEST,
         );
       }
       throw new HttpException(
