@@ -10,7 +10,6 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class CognitoService {
@@ -46,11 +45,10 @@ export class CognitoService {
     email: string,
     password: string,
   ) {
-    const username = uuidv4();
-    const secretHash = this.getSecretHash(username);
+    const secretHash = this.getSecretHash(email);
     const command = new SignUpCommand({
       ClientId: this.configService.get<string>('COGNITO_CLIENT_ID'),
-      Username: username,
+      Username: email,
       Password: password,
       SecretHash: secretHash,
       UserAttributes: [
@@ -63,7 +61,6 @@ export class CognitoService {
     const result = await this.client.send(command);
     return {
       UserSub: result.UserSub,
-      generatedUsername: username,
       CodeDeliveryDetails: result.CodeDeliveryDetails,
     };
   }
