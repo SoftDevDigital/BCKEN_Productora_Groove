@@ -23,8 +23,8 @@ export class AuthController {
   async signUp(@Body() dto: SignUpDto) {
     try {
       const result = await this.cognitoService.signUp(
-        dto.nombre,
-        dto.apellido,
+        dto.name,
+        dto.last_name,
         dto.email,
         dto.password,
       );

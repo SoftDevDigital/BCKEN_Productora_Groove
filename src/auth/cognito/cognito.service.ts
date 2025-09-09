@@ -41,8 +41,8 @@ export class CognitoService {
   }
 
   async signUp(
-    nombre: string,
-    apellido: string,
+    name: string,
+    last_name: string,
     email: string,
     password: string,
   ) {
@@ -55,8 +55,8 @@ export class CognitoService {
       SecretHash: secretHash,
       UserAttributes: [
         { Name: 'email', Value: email },
-        { Name: 'given_name', Value: nombre },
-        { Name: 'family_name', Value: apellido },
+        { Name: 'given_name', Value: name },
+        { Name: 'family_name', Value: last_name },
         { Name: 'custom:country', Value: 'default' },
       ],
     });
