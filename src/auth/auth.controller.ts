@@ -36,7 +36,7 @@ export class AuthController {
         codeDeliveryDetails: result.CodeDeliveryDetails,
       };
     } catch (error) {
-      console.error('Signup error details:', error); // Para depuración en logs
+      // Removido console.error para evitar logs innecesarios en consola
       if (error.name === 'UsernameExistsException') {
         throw new HttpException(
           'El email ya está registrado. Intenta con signin.',
@@ -64,11 +64,9 @@ export class AuthController {
   async signIn(@Body() dto: SignInDto) {
     try {
       const result = await this.cognitoService.signIn(dto.email, dto.password);
-
       if (result.$metadata.httpStatusCode !== 200) {
         throw result; // Lanza el error para capturarlo en el catch
       }
-
       const { AuthenticationResult } = result;
       if (!AuthenticationResult) {
         throw new HttpException(
@@ -76,10 +74,8 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-
       const { IdToken, AccessToken, RefreshToken, ExpiresIn } =
         AuthenticationResult;
-
       // Decodifica IdToken para obtener claims (simple para dev)
       if (!IdToken) {
         throw new HttpException(
@@ -87,7 +83,6 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-
       const payload: {
         sub: string;
         email: string;
@@ -95,7 +90,6 @@ export class AuthController {
         family_name: string;
         [key: string]: any;
       } = JSON.parse(Buffer.from(IdToken.split('.')[1], 'base64').toString());
-
       return {
         statusCode: HttpStatus.OK,
         message: 'Login exitoso',
