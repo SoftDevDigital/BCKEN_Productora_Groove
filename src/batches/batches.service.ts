@@ -3,100 +3,83 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
-  ScanCommand,
+  QueryCommand,
   GetCommand,
   UpdateCommand,
   DeleteCommand,
   UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { CreateEventDto } from './dto/create-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
+import { CreateBatchDto } from './dto/create-batc.dto';
+import { UpdateBatchDto } from './dto/update-batch.dto';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
-export class EventsService {
-  private readonly tableName = 'Events-v2';
+export class BatchesService {
+  private readonly tableName = 'Batches-v2';
   private readonly docClient: DynamoDBDocumentClient;
 
   constructor(@Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
 
-  async create(createEventDto: CreateEventDto) {
-    const eventId = uuidv4();
+  async create(eventId: string, createBatchDto: CreateBatchDto) {
+    const batchId = uuidv4();
     const params = {
       TableName: this.tableName,
       Item: {
-        id: eventId,
-        name: createEventDto.name,
-        date: createEventDto.date,
-        location: createEventDto.location,
-        totalTickets: createEventDto.totalTickets,
-        availableTickets: createEventDto.totalTickets,
+        eventId,
+        batchId,
+        name: createBatchDto.name,
+        totalTickets: createBatchDto.totalTickets,
+        availableTickets: createBatchDto.totalTickets,
         createdAt: new Date().toISOString(),
       },
     };
 
     try {
       await this.docClient.send(new PutCommand(params));
-      return { id: eventId, ...createEventDto };
+      return { batchId, ...createBatchDto };
     } catch (error) {
       throw new HttpException(
-        'Error al crear evento en DynamoDB',
+        'Error al crear tanda en DynamoDB',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async findAll() {
+  async findAll(eventId: string) {
     const params = {
       TableName: this.tableName,
+      KeyConditionExpression: 'eventId = :eventId',
+      ExpressionAttributeValues: {
+        ':eventId': eventId,
+      },
     };
     try {
-      const result = await this.docClient.send(new ScanCommand(params));
+      const result = await this.docClient.send(new QueryCommand(params));
       return result.Items;
     } catch (error) {
       throw new HttpException(
-        'Error al listar eventos',
+        'Error al listar tandas',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async findOne(id: string) {
-    const params = {
-      TableName: this.tableName,
-      Key: { id },
-    };
-    try {
-      const result = await this.docClient.send(new GetCommand(params));
-      return result.Item;
-    } catch (error) {
-      throw new HttpException(
-        'Error al obtener evento',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  async update(id: string, updateEventDto: UpdateEventDto) {
+  async update(eventId: string, batchId: string, updateBatchDto: UpdateBatchDto) {
     const params: UpdateCommandInput = {
       TableName: this.tableName,
-      Key: { id },
-      UpdateExpression: 'SET #name = :name, #date = :date, #location = :location, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
+      Key: { eventId, batchId },
+      UpdateExpression: 'SET #name = :name, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
       ExpressionAttributeNames: {
         '#name': 'name',
-        '#date': 'date',
-        '#location': 'location',
         '#totalTickets': 'totalTickets',
         '#availableTickets': 'availableTickets',
       },
       ExpressionAttributeValues: {
-        ':name': updateEventDto.name,
-        ':date': updateEventDto.date,
-        ':location': updateEventDto.location,
-        ':totalTickets': updateEventDto.totalTickets,
-        ':availableTickets': updateEventDto.totalTickets,
+        ':name': updateBatchDto.name,
+        ':totalTickets': updateBatchDto.totalTickets,
+        ':availableTickets': updateBatchDto.totalTickets,
       },
       ReturnValues: 'ALL_NEW',
     };
@@ -114,32 +97,32 @@ export class EventsService {
       return result.Attributes;
     } catch (error) {
       throw new HttpException(
-        'Error al actualizar evento',
+        'Error al actualizar tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async remove(id: string) {
+  async remove(eventId: string, batchId: string) {
     const params = {
       TableName: this.tableName,
-      Key: { id },
+      Key: { eventId, batchId },
     };
     try {
       await this.docClient.send(new DeleteCommand(params));
       return true;
     } catch (error) {
       throw new HttpException(
-        'Error al eliminar evento',
+        'Error al eliminar tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async decrementTickets(eventId: string, quantity: number) {
+  async decrementTickets(eventId: string, batchId: string, quantity: number) {
     const params: UpdateCommandInput = {
       TableName: this.tableName,
-      Key: { id: eventId },
+      Key: { eventId, batchId },
       UpdateExpression: 'ADD #availableTickets :decrement',
       ExpressionAttributeNames: {
         '#availableTickets': 'availableTickets',
@@ -157,7 +140,7 @@ export class EventsService {
       return result.Attributes;
     } catch (error) {
       throw new HttpException(
-        'No hay tickets suficientes o error al decrementar',
+        'No hay tickets suficientes en la tanda o error al decrementar',
         HttpStatus.BAD_REQUEST,
       );
     }
