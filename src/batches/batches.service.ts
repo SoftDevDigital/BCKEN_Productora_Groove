@@ -18,7 +18,9 @@ export class BatchesService {
   private readonly tableName = 'Batches-v2';
   private readonly docClient: DynamoDBDocumentClient;
 
-  constructor(@Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient) {
+  constructor(
+    @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
+  ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
 
@@ -66,11 +68,16 @@ export class BatchesService {
     }
   }
 
-  async update(eventId: string, batchId: string, updateBatchDto: UpdateBatchDto) {
+  async update(
+    eventId: string,
+    batchId: string,
+    updateBatchDto: UpdateBatchDto,
+  ) {
     const params: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { eventId, batchId },
-      UpdateExpression: 'SET #name = :name, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
+      UpdateExpression:
+        'SET #name = :name, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#totalTickets': 'totalTickets',
@@ -86,7 +93,9 @@ export class BatchesService {
 
     if (params.ExpressionAttributeValues) {
       params.ExpressionAttributeValues = Object.fromEntries(
-        Object.entries(params.ExpressionAttributeValues).filter(([_, value]) => value !== undefined)
+        Object.entries(params.ExpressionAttributeValues).filter(
+          ([_, value]) => value !== undefined,
+        ),
       );
     } else {
       params.ExpressionAttributeValues = {};
