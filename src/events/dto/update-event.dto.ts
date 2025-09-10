@@ -4,4 +4,5 @@ export class UpdateEventDto {
   name?: string;
   date?: string;
   location?: string;
+  totalTickets?: number;
 }
