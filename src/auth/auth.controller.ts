@@ -6,6 +6,7 @@ import {
   ValidationPipe,
   HttpStatus,
   HttpException,
+  Req,
 } from '@nestjs/common';
 import { CognitoService } from './cognito/cognito.service';
 import { SignUpDto } from './dto/signup.dto';
@@ -13,6 +14,7 @@ import { SignInDto } from './dto/signin.dto';
 import { ConfirmDto } from './dto/confirm.dto';
 import { ResendDto } from './dto/resend.dto';
 import { AdminConfirmDto } from './dto/admin-confirm.dto';
+import type { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -183,8 +185,24 @@ export class AuthController {
 
   @Post('admin/assign-role')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async assignRole(@Body() body: { userSub: string; role: string }) {
+  async assignRole(
+    @Req() req: Request,
+    @Body() body: { userSub: string; role: string },
+  ) {
     try {
+      // Check if running in Lambda context and verify role
+      if (req['apiGateway']) {
+        const claims =
+          req['apiGateway'].event.requestContext.authorizer.jwt.claims;
+        const userRole = claims['custom:role'] || 'User';
+        if (userRole !== 'Admin') {
+          throw new HttpException(
+            'No autorizado: Requiere rol Admin',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      } // Else, for local dev, skip check
+
       await this.cognitoService.adminAssignRole(body.userSub, body.role);
       return {
         statusCode: HttpStatus.OK,
@@ -200,8 +218,21 @@ export class AuthController {
 
   @Post('admin/confirm-signup')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async adminConfirm(@Body() dto: AdminConfirmDto) {
+  async adminConfirm(@Req() req: Request, @Body() dto: AdminConfirmDto) {
     try {
+      // Check if running in Lambda context and verify role
+      if (req['apiGateway']) {
+        const claims =
+          req['apiGateway'].event.requestContext.authorizer.jwt.claims;
+        const userRole = claims['custom:role'] || 'User';
+        if (userRole !== 'Admin') {
+          throw new HttpException(
+            'No autorizado: Requiere rol Admin',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      } // Else, for local dev, skip check
+
       await this.cognitoService.adminConfirmSignUp(dto.username);
       return {
         statusCode: HttpStatus.OK,
