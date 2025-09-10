@@ -13,6 +13,6 @@ export class SignUpDto {
   email: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(6, { message: 'Password must be at least 6 characters long' })
   password: string;
 }
