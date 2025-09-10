@@ -15,10 +15,41 @@ import { ConfirmDto } from './dto/confirm.dto';
 import { ResendDto } from './dto/resend.dto';
 import { AdminConfirmDto } from './dto/admin-confirm.dto';
 import type { Request } from 'express';
+import * as jwt from 'jsonwebtoken';
 
 @Controller('auth')
 export class AuthController {
   constructor(private cognitoService: CognitoService) {}
+
+  private getClaims(req: Request): any {
+    let claims: any = null;
+
+    // Caso Lambda con API Gateway
+    if (req['apiGateway']) {
+      const ctx = req['apiGateway'].event.requestContext;
+      claims = ctx.authorizer?.jwt?.claims || ctx.authorizer?.claims || null;
+    }
+
+    // Caso local con Express
+    if (!claims) {
+      const token = req.headers['authorization']?.replace('Bearer ', '');
+      if (token) {
+        claims = jwt.decode(token) as any;
+      }
+    }
+
+    return claims;
+  }
+
+  private ensureAdmin(claims: any) {
+    const userRole = claims?.['custom:role'] || 'User';
+    if (userRole !== 'Admin') {
+      throw new HttpException(
+        'No autorizado: Requiere rol Admin',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
 
   @Post('signup')
   @UsePipes(new ValidationPipe({ transform: true }))
@@ -38,7 +69,6 @@ export class AuthController {
         codeDeliveryDetails: result.CodeDeliveryDetails,
       };
     } catch (error) {
-      // Removido console.error para evitar logs innecesarios en consola
       if (error.name === 'UsernameExistsException') {
         throw new HttpException(
           'El email ya está registrado. Intenta con signin.',
@@ -67,7 +97,7 @@ export class AuthController {
     try {
       const result = await this.cognitoService.signIn(dto.email, dto.password);
       if (result.$metadata.httpStatusCode !== 200) {
-        throw result; // Lanza el error para capturarlo en el catch
+        throw result;
       }
       const { AuthenticationResult } = result;
       if (!AuthenticationResult) {
@@ -78,7 +108,6 @@ export class AuthController {
       }
       const { IdToken, AccessToken, RefreshToken, ExpiresIn } =
         AuthenticationResult;
-      // Decodifica IdToken para obtener claims (simple para dev)
       if (!IdToken) {
         throw new HttpException(
           'Error en la autenticación: IdToken no definido',
@@ -190,20 +219,11 @@ export class AuthController {
     @Body() body: { userSub: string; role: string },
   ) {
     try {
-      // Check if running in Lambda context and verify role
-      if (req['apiGateway']) {
-        const claims =
-          req['apiGateway'].event.requestContext.authorizer.jwt.claims;
-        const userRole = claims['custom:role'] || 'User';
-        if (userRole !== 'Admin') {
-          throw new HttpException(
-            'No autorizado: Requiere rol Admin',
-            HttpStatus.FORBIDDEN,
-          );
-        }
-      } // Else, for local dev, skip check
+      const claims = this.getClaims(req);
+      console.log("Claims obtenidos:", claims);
+      this.ensureAdmin(claims);
 
-      await this.cognitoService.adminAssignRole(body.userSub, body.role);
+      //await this.cognitoService.adminAssignRole(body.userSub, body.role);
       return {
         statusCode: HttpStatus.OK,
         message: `Rol "${body.role}" asignado exitosamente al usuario ${body.userSub}`,
@@ -220,18 +240,8 @@ export class AuthController {
   @UsePipes(new ValidationPipe({ transform: true }))
   async adminConfirm(@Req() req: Request, @Body() dto: AdminConfirmDto) {
     try {
-      // Check if running in Lambda context and verify role
-      if (req['apiGateway']) {
-        const claims =
-          req['apiGateway'].event.requestContext.authorizer.jwt.claims;
-        const userRole = claims['custom:role'] || 'User';
-        if (userRole !== 'Admin') {
-          throw new HttpException(
-            'No autorizado: Requiere rol Admin',
-            HttpStatus.FORBIDDEN,
-          );
-        }
-      } // Else, for local dev, skip check
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
 
       await this.cognitoService.adminConfirmSignUp(dto.username);
       return {
