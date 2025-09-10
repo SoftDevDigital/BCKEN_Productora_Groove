@@ -59,6 +59,7 @@ export class CognitoService {
           { Name: 'given_name', Value: name },
           { Name: 'family_name', Value: last_name },
           { Name: 'custom:country', Value: 'default' },
+          { Name: 'custom:role', Value: 'User' },
         ],
       });
       const result = await this.client.send(command);
