@@ -7,5 +7,6 @@ import { AWSSDKModule } from '../aws-sdk/aws-sdk.module';
   imports: [AWSSDKModule],
   controllers: [BatchesController],
   providers: [BatchesService],
+  exports: [BatchesService],
 })
 export class BatchesModule {}

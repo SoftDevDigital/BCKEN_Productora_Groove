@@ -30,7 +30,9 @@ export class BatchesController {
     if (!claims) {
       const token = req.headers['authorization']?.replace('Bearer ', '');
       if (token) {
-        claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+        claims = JSON.parse(
+          Buffer.from(token.split('.')[1], 'base64').toString(),
+        );
       }
     }
     return claims;
@@ -48,7 +50,11 @@ export class BatchesController {
 
   @Post()
   @UsePipes(new ValidationPipe({ transform: true }))
-  async create(@Param('eventId') eventId: string, @Body() dto: CreateBatchDto, @Req() req: Request) {
+  async create(
+    @Param('eventId') eventId: string,
+    @Body() dto: CreateBatchDto,
+    @Req() req: Request,
+  ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
@@ -75,11 +81,20 @@ export class BatchesController {
 
   @Put(':batchId')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async update(@Param('eventId') eventId: string, @Param('batchId') batchId: string, @Body() dto: UpdateBatchDto, @Req() req: Request) {
+  async update(
+    @Param('eventId') eventId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: UpdateBatchDto,
+    @Req() req: Request,
+  ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const updatedBatch = await this.batchesService.update(eventId, batchId, dto);
+      const updatedBatch = await this.batchesService.update(
+        eventId,
+        batchId,
+        dto,
+      );
       if (!updatedBatch) {
         throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
       }
@@ -93,7 +108,11 @@ export class BatchesController {
   }
 
   @Delete(':batchId')
-  async remove(@Param('eventId') eventId: string, @Param('batchId') batchId: string, @Req() req: Request) {
+  async remove(
+    @Param('eventId') eventId: string,
+    @Param('batchId') batchId: string,
+    @Req() req: Request,
+  ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);

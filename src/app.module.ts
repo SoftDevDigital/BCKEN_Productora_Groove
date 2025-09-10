@@ -5,6 +5,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { EventsModule } from './events/events.module';
 import { AWSSDKModule } from './aws-sdk/aws-sdk.module';
+import { BatchesModule } from './batches/batches.module';
+import { SalesModule } from './sales/sales.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { AWSSDKModule } from './aws-sdk/aws-sdk.module';
     AuthModule,
     EventsModule,
     AWSSDKModule,
+    BatchesModule,
+    SalesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

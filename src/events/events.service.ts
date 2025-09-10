@@ -18,7 +18,9 @@ export class EventsService {
   private readonly tableName = 'Events-v2';
   private readonly docClient: DynamoDBDocumentClient;
 
-  constructor(@Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient) {
+  constructor(
+    @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
+  ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
 
@@ -83,7 +85,8 @@ export class EventsService {
     const params: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { id },
-      UpdateExpression: 'SET #name = :name, #date = :date, #location = :location, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
+      UpdateExpression:
+        'SET #name = :name, #date = :date, #location = :location, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#date': 'date',
@@ -103,7 +106,9 @@ export class EventsService {
 
     if (params.ExpressionAttributeValues) {
       params.ExpressionAttributeValues = Object.fromEntries(
-        Object.entries(params.ExpressionAttributeValues).filter(([_, value]) => value !== undefined)
+        Object.entries(params.ExpressionAttributeValues).filter(
+          ([_, value]) => value !== undefined,
+        ),
       );
     } else {
       params.ExpressionAttributeValues = {};
