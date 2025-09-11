@@ -1,16 +1,16 @@
 import {
   Controller,
-  Post,
-  Body,
   Get,
-  Param,
+  Post,
   Put,
   Delete,
-  UsePipes,
-  ValidationPipe,
+  Body,
+  Param,
+  Req,
   HttpException,
   HttpStatus,
-  Req,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -48,6 +48,25 @@ export class EventsController {
     }
   }
 
+  @Post()
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async create(@Body() createEventDto: CreateEventDto, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const event = await this.eventsService.create(createEventDto);
+      return event;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al crear evento',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get()
   async findAll() {
     try {
@@ -55,21 +74,6 @@ export class EventsController {
     } catch (error) {
       throw new HttpException(
         'Error al obtener eventos',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post()
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async create(@Body() dto: CreateEventDto, @Req() req: Request) {
-    try {
-      const claims = this.getClaims(req);
-      this.ensureAdmin(claims);
-      return await this.eventsService.create(dto);
-    } catch (error) {
-      throw new HttpException(
-        'Error al crear evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -84,6 +88,9 @@ export class EventsController {
       }
       return event;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al obtener evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -95,18 +102,21 @@ export class EventsController {
   @UsePipes(new ValidationPipe({ transform: true }))
   async update(
     @Param('id') id: string,
-    @Body() dto: UpdateEventDto,
+    @Body() updateEventDto: UpdateEventDto,
     @Req() req: Request,
   ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const updatedEvent = await this.eventsService.update(id, dto);
-      if (!updatedEvent) {
+      const event = await this.eventsService.findOne(id);
+      if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return updatedEvent;
+      return await this.eventsService.update(id, updateEventDto);
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al actualizar evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -119,12 +129,15 @@ export class EventsController {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const result = await this.eventsService.remove(id);
-      if (!result) {
+      const event = await this.eventsService.findOne(id);
+      if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return { message: `Evento ${id} eliminado` };
+      return await this.eventsService.delete(id);
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al eliminar evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
