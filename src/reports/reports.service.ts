@@ -55,6 +55,8 @@ export class ReportsService {
           const event = await this.eventsService.findOne(eventId);
           salesByEvent[eventId] = {
             eventName: event?.name || 'Unknown',
+            from: event?.from || 'Unknown',
+            to: event?.to || 'Unknown',
             totalSales: 0,
             totalTickets: 0,
             totalRevenue: 0,
@@ -145,7 +147,12 @@ export class ReportsService {
               soldTickets: reseller.soldTickets,
             }
           : null,
-        event: { id: event.id, name: event.name },
+        event: {
+          id: event.id,
+          name: event.name,
+          from: event.from,
+          to: event.to,
+        },
         batch: { id: batch.batchId, name: batch.name },
       };
     } catch (error) {

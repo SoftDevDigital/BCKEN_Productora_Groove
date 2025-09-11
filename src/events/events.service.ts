@@ -3,15 +3,14 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
-  ScanCommand,
   GetCommand,
+  ScanCommand,
   UpdateCommand,
   DeleteCommand,
-  UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
+import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class EventsService {
@@ -31,7 +30,8 @@ export class EventsService {
       Item: {
         id: eventId,
         name: createEventDto.name,
-        date: createEventDto.date,
+        from: createEventDto.from,
+        to: createEventDto.to,
         location: createEventDto.location,
         createdAt: new Date().toISOString(),
       },
@@ -42,7 +42,7 @@ export class EventsService {
       return { id: eventId, ...createEventDto };
     } catch (error) {
       throw new HttpException(
-        'Error al crear evento en DynamoDB',
+        'Error al crear evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -54,10 +54,10 @@ export class EventsService {
     };
     try {
       const result = await this.docClient.send(new ScanCommand(params));
-      return result.Items;
+      return result.Items || [];
     } catch (error) {
       throw new HttpException(
-        'Error al listar eventos',
+        'Error al obtener eventos',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -70,7 +70,7 @@ export class EventsService {
     };
     try {
       const result = await this.docClient.send(new GetCommand(params));
-      return result.Item;
+      return result.Item || null;
     } catch (error) {
       throw new HttpException(
         'Error al obtener evento',
@@ -80,33 +80,50 @@ export class EventsService {
   }
 
   async update(id: string, updateEventDto: UpdateEventDto) {
-    const params: UpdateCommandInput = {
+    const updateExpressionParts: string[] = [];
+    const expressionAttributeNames: { [key: string]: string } = {};
+    const expressionAttributeValues: { [key: string]: any } = {};
+
+    if (updateEventDto.name) {
+      updateExpressionParts.push('#name = :name');
+      expressionAttributeNames['#name'] = 'name';
+      expressionAttributeValues[':name'] = updateEventDto.name;
+    }
+    if (updateEventDto.from) {
+      updateExpressionParts.push('#from = :from');
+      expressionAttributeNames['#from'] = 'from';
+      expressionAttributeValues[':from'] = updateEventDto.from;
+    }
+    if (updateEventDto.to) {
+      updateExpressionParts.push('#to = :to');
+      expressionAttributeNames['#to'] = 'to';
+      expressionAttributeValues[':to'] = updateEventDto.to;
+    }
+    if (updateEventDto.location) {
+      updateExpressionParts.push('#location = :location');
+      expressionAttributeNames['#location'] = 'location';
+      expressionAttributeValues[':location'] = updateEventDto.location;
+    }
+
+    if (updateExpressionParts.length === 0) {
+      throw new HttpException(
+        'No se proporcionaron datos para actualizar',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    updateExpressionParts.push('#updatedAt = :updatedAt');
+    expressionAttributeNames['#updatedAt'] = 'updatedAt';
+    expressionAttributeValues[':updatedAt'] = new Date().toISOString();
+
+    const params = {
       TableName: this.tableName,
       Key: { id },
-      UpdateExpression:
-        'SET #name = :name, #date = :date, #location = :location',
-      ExpressionAttributeNames: {
-        '#name': 'name',
-        '#date': 'date',
-        '#location': 'location',
-      },
-      ExpressionAttributeValues: {
-        ':name': updateEventDto.name,
-        ':date': updateEventDto.date,
-        ':location': updateEventDto.location,
-      },
-      ReturnValues: 'ALL_NEW',
+      UpdateExpression: 'SET ' + updateExpressionParts.join(', '),
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW' as const,
     };
-
-    if (params.ExpressionAttributeValues) {
-      params.ExpressionAttributeValues = Object.fromEntries(
-        Object.entries(params.ExpressionAttributeValues).filter(
-          ([_, value]) => value !== undefined,
-        ),
-      );
-    } else {
-      params.ExpressionAttributeValues = {};
-    }
 
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
@@ -119,14 +136,14 @@ export class EventsService {
     }
   }
 
-  async remove(id: string) {
+  async delete(id: string) {
     const params = {
       TableName: this.tableName,
       Key: { id },
     };
     try {
       await this.docClient.send(new DeleteCommand(params));
-      return true;
+      return { message: `Evento ${id} eliminado` };
     } catch (error) {
       throw new HttpException(
         'Error al eliminar evento',
