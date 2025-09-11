@@ -12,6 +12,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
+import { TicketsService } from '../tickets/tickets.service';
 
 @Injectable()
 export class SalesService {
@@ -22,6 +23,7 @@ export class SalesService {
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
     private readonly eventsService: EventsService,
     private readonly batchesService: BatchesService,
+    private readonly ticketsService: TicketsService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
@@ -139,6 +141,7 @@ export class SalesService {
     };
 
     try {
+      const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
         // Restar tickets
         await this.batchesService.decrementTickets(
@@ -146,8 +149,16 @@ export class SalesService {
           sale.Item.batchId,
           sale.Item.quantity,
         );
+        // Generar tickets individuales
+        const tickets = await this.ticketsService.createTickets({
+          id: saleId,
+          userId: sale.Item.userId,
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+          quantity: sale.Item.quantity,
+        });
+        return { ...result.Attributes, tickets };
       }
-      const result = await this.docClient.send(new UpdateCommand(updateParams));
       return result.Attributes;
     } catch (error) {
       throw new HttpException(
