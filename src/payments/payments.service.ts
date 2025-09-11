@@ -3,10 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { CreateQrDto } from './dto/create-qr.dto';
 import * as QRCode from 'qrcode';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class PaymentsService {
   private client: MercadoPagoConfig;
+  private s3Client: S3Client;
 
   constructor(private configService: ConfigService) {
     const accessToken =
@@ -17,15 +20,17 @@ export class PaymentsService {
       );
     }
     this.client = new MercadoPagoConfig({ accessToken });
+    this.s3Client = new S3Client({
+      region: this.configService.get<string>('AWS_REGION'),
+    });
   }
 
-  async generateQr(dto: CreateQrDto): Promise<any> {
+  async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
     const preference = new Preference(this.client);
-
     const preferenceData = {
       items: [
         {
-          id: 'item-' + Math.random().toString(36).substring(2, 10),
+          id: `sale-${saleId}`,
           title: dto.title,
           unit_price: dto.amount,
           quantity: 1,
@@ -38,27 +43,43 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: 'https://tu-dominio.com/success',
-        failure: 'https://tu-dominio.com/failure',
-        pending: 'https://tu-dominio.com/pending',
+        success: `${this.configService.get<string>('API_BASE_URL')}/payments/success`,
+        failure: `${this.configService.get<string>('API_BASE_URL')}/payments/failure`,
+        pending: `${this.configService.get<string>('API_BASE_URL')}/payments/pending`,
       },
       auto_return: 'approved',
+      external_reference: saleId,
+      notification_url: `${this.configService.get<string>('API_BASE_URL')}/sales/webhook`,
     };
 
     try {
       const response = await preference.create({ body: preferenceData });
-
       let paymentLink = response.init_point;
-
       let qrImageBase64: string | undefined;
+      let qrS3Url: string | undefined;
+
       if (dto.generateQrImage && paymentLink) {
-        qrImageBase64 = await QRCode.toDataURL(paymentLink); // Espera la promesa
+        qrImageBase64 = await QRCode.toDataURL(paymentLink);
+        const qrKey = `qrs/sale-${saleId}-${uuidv4()}.png`;
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket:
+              this.configService.get<string>('S3_BUCKET') ||
+              'ticket-qr-bucket-dev-v2',
+            Key: qrKey,
+            Body: Buffer.from(qrImageBase64.split(',')[1], 'base64'),
+            ContentType: 'image/png',
+          }),
+        );
+        qrS3Url = `https://${this.configService.get<string>('S3_BUCKET')}.s3.amazonaws.com/${qrKey}`;
       }
 
       return {
-        paymentLink, // Siempre retorna el link si existe
+        paymentLink,
         preferenceId: response.id,
-        qrImageBase64, // Solo si se solicitó y paymentLink está disponible
+        qrImageBase64,
+        qrS3Url,
+        saleId,
       };
     } catch (error) {
       throw new BadRequestException(`Error al generar QR: ${error.message}`);

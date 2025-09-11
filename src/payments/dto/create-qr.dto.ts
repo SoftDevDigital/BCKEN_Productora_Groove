@@ -1,21 +1,16 @@
-import {
-  IsString,
-  IsNumber,
-  IsNotEmpty,
-  IsBoolean,
-  IsOptional,
-} from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
 
 export class CreateQrDto {
   @IsString()
-  @IsNotEmpty()
   title: string;
 
   @IsNumber()
-  @IsNotEmpty()
   amount: number;
 
   @IsBoolean()
   @IsOptional()
   generateQrImage?: boolean;
+
+  @IsString()
+  saleId: string;
 }

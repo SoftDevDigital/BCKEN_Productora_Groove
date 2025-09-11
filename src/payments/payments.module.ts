@@ -4,8 +4,9 @@ import { PaymentsController } from './payments.controller';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule.forRoot()], // Para acceder a .env
+  imports: [ConfigModule.forRoot()],
   controllers: [PaymentsController],
   providers: [PaymentsService],
+  exports: [PaymentsService], // Exportar PaymentsService
 })
 export class PaymentsModule {}
