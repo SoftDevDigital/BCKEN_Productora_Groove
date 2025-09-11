@@ -153,9 +153,10 @@ export class CognitoService {
     try {
       const now = Date.now();
       const lastResendTime = this.lastResend[email] || 0;
-      if (now - lastResendTime < 300000) {
+      if (now - lastResendTime < 60000) {
+        // Cambiado de 300000 (5 minutos) a 60000 (1 minuto)
         throw new BadRequestException(
-          'Debes esperar 5 minutos desde el último reenvío.',
+          'Debes esperar 1 minuto desde el último reenvío.',
         );
       }
       const secretHash = this.getSecretHash(email);
