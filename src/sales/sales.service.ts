@@ -4,6 +4,9 @@ import {
   DynamoDBDocumentClient,
   PutCommand,
   PutCommandInput,
+  UpdateCommand,
+  UpdateCommandInput,
+  GetCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,7 +50,7 @@ export class SalesService {
     }
 
     // Calcular precio y comisión
-    const basePrice = batch.price || 10; // Fallback si price no está definido
+    const basePrice = batch.price || 10;
     let total = quantity * basePrice;
     let commission = 0;
     if (type === 'reseller') {
@@ -57,8 +60,8 @@ export class SalesService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      commission = total * 0.1; // 10% de comisión
-      total += commission; // Precio total incluye comisión
+      commission = total * 0.1;
+      total += commission;
     }
 
     // Registrar venta como pending
@@ -66,16 +69,16 @@ export class SalesService {
       TableName: this.tableName,
       Item: {
         id: saleId,
-        userId, // Comprador
-        resellerId: resellerId || null, // Revendedor, si aplica
+        userId,
+        resellerId: resellerId || null,
         eventId,
         batchId,
         quantity,
-        type, // direct o reseller
-        basePrice, // Precio base por ticket
-        commission, // Comisión para reseller, si aplica
-        total, // Precio final (base + comisión)
-        status: 'pending', // Espera confirmación de pago
+        type,
+        basePrice,
+        commission,
+        total,
+        status: 'pending',
         createdAt: new Date().toISOString(),
       },
     };
@@ -96,6 +99,59 @@ export class SalesService {
     } catch (error) {
       throw new HttpException(
         'Error al registrar la venta',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async confirmSale(saleId: string, paymentStatus: string, paymentId: string) {
+    const sale = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { id: saleId },
+      }),
+    );
+
+    if (!sale.Item) {
+      throw new HttpException('Venta no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    if (sale.Item.status !== 'pending') {
+      throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
+    }
+
+    const updateParams: UpdateCommandInput = {
+      TableName: this.tableName,
+      Key: { id: saleId },
+      UpdateExpression:
+        'SET #status = :status, #paymentId = :paymentId, #updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+        '#paymentId': 'paymentId',
+        '#updatedAt': 'updatedAt',
+      },
+      ExpressionAttributeValues: {
+        ':status': paymentStatus,
+        ':paymentId': paymentId,
+        ':updatedAt': new Date().toISOString(),
+      },
+      ReturnValues: 'ALL_NEW',
+    };
+
+    try {
+      if (paymentStatus === 'approved') {
+        // Restar tickets
+        await this.batchesService.decrementTickets(
+          sale.Item.eventId,
+          sale.Item.batchId,
+          sale.Item.quantity,
+        );
+      }
+      const result = await this.docClient.send(new UpdateCommand(updateParams));
+      return result.Attributes;
+    } catch (error) {
+      throw new HttpException(
+        'Error al confirmar la venta',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -9,12 +9,19 @@ import {
   Req,
 } from '@nestjs/common';
 import { SalesService } from './sales.service';
+import { PaymentsService } from '../payments/payments.service';
+import { BatchesService } from '../batches/batches.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { WebhookDto } from './dto/webhook.dto';
 import type { Request } from 'express';
 
 @Controller('sales')
 export class SalesController {
-  constructor(private readonly salesService: SalesService) {}
+  constructor(
+    private readonly salesService: SalesService,
+    private readonly paymentsService: PaymentsService,
+    private readonly batchesService: BatchesService,
+  ) {}
 
   private getClaims(req: Request): any {
     let claims: any = null;
@@ -62,10 +69,20 @@ export class SalesController {
         );
       }
       const sale = await this.salesService.createSale(dto, claims['sub']);
+      const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
+      const qr = await this.paymentsService.generateQr(
+        {
+          title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId}`,
+          amount: sale.total,
+          generateQrImage: true,
+          saleId: sale.id,
+        },
+        sale.id,
+      );
       return {
         statusCode: HttpStatus.OK,
         message: 'Venta registrada como pendiente. Complete el pago.',
-        data: sale,
+        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -95,11 +112,21 @@ export class SalesController {
         claims['sub'],
         claims['sub'],
       );
+      const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
+      const qr = await this.paymentsService.generateQr(
+        {
+          title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId} (Revendedor)`,
+          amount: sale.total,
+          generateQrImage: true,
+          saleId: sale.id,
+        },
+        sale.id,
+      );
       return {
         statusCode: HttpStatus.OK,
         message:
           'Venta por revendedor registrada como pendiente. Complete el pago.',
-        data: sale,
+        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -107,6 +134,32 @@ export class SalesController {
       }
       throw new HttpException(
         'Error al procesar la compra por revendedor',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('webhook')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async handleWebhook(@Body() dto: WebhookDto) {
+    try {
+      const { saleId, paymentStatus, paymentId } = dto;
+      const sale = await this.salesService.confirmSale(
+        saleId,
+        paymentStatus,
+        paymentId,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: `Venta actualizada: ${paymentStatus}`,
+        data: sale,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al procesar webhook',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
