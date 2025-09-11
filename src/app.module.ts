@@ -8,6 +8,7 @@ import { AWSSDKModule } from './aws-sdk/aws-sdk.module';
 import { BatchesModule } from './batches/batches.module';
 import { SalesModule } from './sales/sales.module';
 import { PaymentsModule } from './payments/payments.module';
+import { TicketsModule } from './tickets/tickets.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PaymentsModule } from './payments/payments.module';
     BatchesModule,
     SalesModule,
     PaymentsModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
