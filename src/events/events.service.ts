@@ -33,8 +33,6 @@ export class EventsService {
         name: createEventDto.name,
         date: createEventDto.date,
         location: createEventDto.location,
-        totalTickets: createEventDto.totalTickets,
-        availableTickets: createEventDto.totalTickets,
         createdAt: new Date().toISOString(),
       },
     };
@@ -86,20 +84,16 @@ export class EventsService {
       TableName: this.tableName,
       Key: { id },
       UpdateExpression:
-        'SET #name = :name, #date = :date, #location = :location, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
+        'SET #name = :name, #date = :date, #location = :location',
       ExpressionAttributeNames: {
         '#name': 'name',
         '#date': 'date',
         '#location': 'location',
-        '#totalTickets': 'totalTickets',
-        '#availableTickets': 'availableTickets',
       },
       ExpressionAttributeValues: {
         ':name': updateEventDto.name,
         ':date': updateEventDto.date,
         ':location': updateEventDto.location,
-        ':totalTickets': updateEventDto.totalTickets,
-        ':availableTickets': updateEventDto.totalTickets,
       },
       ReturnValues: 'ALL_NEW',
     };
@@ -137,33 +131,6 @@ export class EventsService {
       throw new HttpException(
         'Error al eliminar evento',
         HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  async decrementTickets(eventId: string, quantity: number) {
-    const params: UpdateCommandInput = {
-      TableName: this.tableName,
-      Key: { id: eventId },
-      UpdateExpression: 'ADD #availableTickets :decrement',
-      ExpressionAttributeNames: {
-        '#availableTickets': 'availableTickets',
-      },
-      ExpressionAttributeValues: {
-        ':decrement': -quantity,
-        ':quantity': quantity, // Condición para evitar negativos
-      },
-      ConditionExpression: '#availableTickets >= :quantity',
-      ReturnValues: 'ALL_NEW',
-    };
-
-    try {
-      const result = await this.docClient.send(new UpdateCommand(params));
-      return result.Attributes;
-    } catch (error) {
-      throw new HttpException(
-        'No hay tickets suficientes o error al decrementar',
-        HttpStatus.BAD_REQUEST,
       );
     }
   }

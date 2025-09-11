@@ -7,6 +7,7 @@ import {
   HttpStatus,
   HttpException,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { CognitoService } from './cognito/cognito.service';
 import { SignUpDto } from './dto/signup.dto';
@@ -23,13 +24,11 @@ export class AuthController {
 
   private getClaims(req: Request): any {
     let claims: any = null;
-
     // Caso Lambda con API Gateway
     if (req['apiGateway']) {
       const ctx = req['apiGateway'].event.requestContext;
       claims = ctx.authorizer?.jwt?.claims || ctx.authorizer?.claims || null;
     }
-
     // Caso local con Express
     if (!claims) {
       const token = req.headers['authorization']?.replace('Bearer ', '');
@@ -37,7 +36,6 @@ export class AuthController {
         claims = jwt.decode(token) as any;
       }
     }
-
     return claims;
   }
 
@@ -80,7 +78,7 @@ export class AuthController {
         error.name === 'InvalidUserAttributeException'
       ) {
         throw new HttpException(
-          'Parámetros inválidos en el registro. Verifica el formato del email y password.',
+          'Parámetros inválidos en el registro. Verifica el formato del email, password o rol.',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -154,6 +152,50 @@ export class AuthController {
     }
   }
 
+  @Post('admin/assign-role')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async assignRole(
+    @Req() req: Request,
+    @Body() body: { userSub: string; role: string },
+  ) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      await this.cognitoService.adminAssignRole(body.userSub, body.role);
+      return {
+        statusCode: HttpStatus.OK,
+        message: `Rol "${body.role}" asignado exitosamente al usuario ${body.userSub}`,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      }
+      throw new HttpException(
+        'Error al asignar rol',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('admin/confirm-signup')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async adminConfirm(@Req() req: Request, @Body() dto: AdminConfirmDto) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      await this.cognitoService.adminConfirmSignUp(dto.username);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Usuario confirmado manualmente',
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al confirmar usuario manualmente',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('confirm')
   @UsePipes(new ValidationPipe({ transform: true }))
   async confirm(@Body() dto: ConfirmDto) {
@@ -194,9 +236,7 @@ export class AuthController {
         codeDeliveryDetails: result.CodeDeliveryDetails,
       };
     } catch (error) {
-      if (
-        error.message === 'Debes esperar 5 minutos desde el último reenvío.'
-      ) {
+      if (error.message === 'Debes esperar 1 minuto desde el último reenvío.') {
         throw new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS);
       }
       if (error.name === 'UserNotFoundException') {
@@ -207,50 +247,6 @@ export class AuthController {
       }
       throw new HttpException(
         'Error al reenviar código',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post('admin/assign-role')
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async assignRole(
-    @Req() req: Request,
-    @Body() body: { userSub: string; role: string },
-  ) {
-    try {
-      const claims = this.getClaims(req);
-      console.log("Claims obtenidos:", claims);
-      this.ensureAdmin(claims);
-
-      //await this.cognitoService.adminAssignRole(body.userSub, body.role);
-      return {
-        statusCode: HttpStatus.OK,
-        message: `Rol "${body.role}" asignado exitosamente al usuario ${body.userSub}`,
-      };
-    } catch (error) {
-      throw new HttpException(
-        'Error al asignar rol',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post('admin/confirm-signup')
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async adminConfirm(@Req() req: Request, @Body() dto: AdminConfirmDto) {
-    try {
-      const claims = this.getClaims(req);
-      this.ensureAdmin(claims);
-
-      await this.cognitoService.adminConfirmSignUp(dto.username);
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'Usuario confirmado manualmente',
-      };
-    } catch (error) {
-      throw new HttpException(
-        'Error al confirmar usuario manualmente',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

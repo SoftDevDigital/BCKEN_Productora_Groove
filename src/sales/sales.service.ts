@@ -23,21 +23,22 @@ export class SalesService {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
 
-  async createSale(createSaleDto: CreateSaleDto, userId: string) {
+  async createSale(
+    createSaleDto: CreateSaleDto,
+    userId: string,
+    resellerId?: string,
+  ) {
     const saleId = uuidv4();
-    const { eventId, batchId, quantity } = createSaleDto;
+    const { eventId, batchId, quantity, type } = createSaleDto;
 
-    // Verificar disponibilidad y decrementar tickets
+    // Validar evento
     const event = await this.eventsService.findOne(eventId);
-    if (!event || event.availableTickets < quantity) {
-      throw new HttpException(
-        'No hay suficientes tickets disponibles',
-        HttpStatus.BAD_REQUEST,
-      );
+    if (!event) {
+      throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
     }
 
-    const batches = await this.batchesService.findAll(eventId);
-    const batch = batches?.find((b) => b.batchId === batchId);
+    // Validar tanda y precio
+    const batch = await this.batchesService.findOne(eventId, batchId);
     if (!batch || batch.availableTickets < quantity) {
       throw new HttpException(
         'No hay suficientes tickets en la tanda',
@@ -45,28 +46,53 @@ export class SalesService {
       );
     }
 
-    // Decrementar tickets de manera atómica
-    await this.eventsService.decrementTickets(eventId, quantity);
-    await this.batchesService.decrementTickets(eventId, batchId, quantity);
+    // Calcular precio y comisión
+    const basePrice = batch.price || 10; // Fallback si price no está definido
+    let total = quantity * basePrice;
+    let commission = 0;
+    if (type === 'reseller') {
+      if (!resellerId) {
+        throw new HttpException(
+          'Se requiere resellerId para ventas por revendedor',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      commission = total * 0.1; // 10% de comisión
+      total += commission; // Precio total incluye comisión
+    }
 
-    // Registrar la venta
-    const total = quantity * 10; // Calcular total antes de enviar
+    // Registrar venta como pending
     const params: PutCommandInput = {
       TableName: this.tableName,
       Item: {
         id: saleId,
-        userId,
+        userId, // Comprador
+        resellerId: resellerId || null, // Revendedor, si aplica
         eventId,
         batchId,
         quantity,
-        total,
+        type, // direct o reseller
+        basePrice, // Precio base por ticket
+        commission, // Comisión para reseller, si aplica
+        total, // Precio final (base + comisión)
+        status: 'pending', // Espera confirmación de pago
         createdAt: new Date().toISOString(),
       },
     };
 
     try {
       await this.docClient.send(new PutCommand(params));
-      return { id: saleId, eventId, batchId, quantity, total };
+      return {
+        id: saleId,
+        eventId,
+        batchId,
+        quantity,
+        type,
+        basePrice,
+        commission,
+        total,
+        status: 'pending',
+      };
     } catch (error) {
       throw new HttpException(
         'Error al registrar la venta',
