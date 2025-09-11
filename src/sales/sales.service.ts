@@ -8,17 +8,20 @@ import {
   PutCommandInput,
   UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SalesService {
   private readonly tableName = 'Sales-v2';
   private readonly docClient: DynamoDBDocumentClient;
+  private readonly sesClient: SESClient;
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
@@ -26,14 +29,20 @@ export class SalesService {
     private readonly batchesService: BatchesService,
     private readonly ticketsService: TicketsService,
     private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
+    this.sesClient = new SESClient({
+      region: this.configService.get<string>('AWS_REGION'),
+    });
   }
 
   async createSale(
     createSaleDto: CreateSaleDto,
     userId: string,
+    email: string,
     resellerId?: string,
+    resellerEmail?: string,
   ) {
     const saleId = uuidv4();
     const { eventId, batchId, quantity, type } = createSaleDto;
@@ -58,9 +67,9 @@ export class SalesService {
     let total = quantity * basePrice;
     let commission = 0;
     if (type === 'reseller') {
-      if (!resellerId) {
+      if (!resellerId || !resellerEmail) {
         throw new HttpException(
-          'Se requiere resellerId para ventas por revendedor',
+          'Se requiere resellerId y resellerEmail para ventas por revendedor',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -90,9 +99,13 @@ export class SalesService {
     try {
       await this.docClient.send(new PutCommand(params));
       // Crear perfil de usuario si no existe
-      await this.usersService.createOrUpdateUser(userId, 'User');
-      if (resellerId) {
-        await this.usersService.createOrUpdateUser(resellerId, 'Reseller');
+      await this.usersService.createOrUpdateUser(userId, 'User', email);
+      if (resellerId && resellerEmail) {
+        await this.usersService.createOrUpdateUser(
+          resellerId,
+          'Reseller',
+          resellerEmail,
+        );
       }
       return {
         id: saleId,
@@ -144,7 +157,7 @@ export class SalesService {
         ':paymentId': paymentId,
         ':updatedAt': new Date().toISOString(),
       },
-      ReturnValues: 'ALL_NEW',
+      ReturnValues: 'ALL_NEW' as const,
     };
 
     try {
@@ -171,6 +184,37 @@ export class SalesService {
           ticketIds,
           sale.Item.resellerId,
         );
+
+        // Obtener email del usuario
+        const user = await this.usersService.getUserProfile(sale.Item.userId);
+        const event = await this.eventsService.findOne(sale.Item.eventId);
+        const batch = await this.batchesService.findOne(
+          sale.Item.eventId,
+          sale.Item.batchId,
+        );
+
+        // Enviar email de confirmación
+        const emailParams = {
+          Source:
+            this.configService.get<string>('SES_EMAIL') ||
+            'tu-email@dominio.com',
+          Destination: {
+            ToAddresses: [user.email],
+          },
+          Message: {
+            Subject: {
+              Data: `Confirmación de Compra - ${event?.name || 'Evento'}`,
+            },
+            Body: {
+              Text: {
+                Data: `Hola,\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Total: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
+              },
+            },
+          },
+        };
+
+        await this.sesClient.send(new SendEmailCommand(emailParams));
+
         return { ...result.Attributes, tickets };
       }
       return result.Attributes;

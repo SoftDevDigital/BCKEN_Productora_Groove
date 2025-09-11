@@ -67,6 +67,28 @@ export class UsersController {
     }
   }
 
+  @Get('purchases')
+  async getPurchases(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAuthenticated(claims);
+      const purchases = await this.usersService.getUserPurchases(claims['sub']);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Compras obtenidas exitosamente',
+        data: purchases,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al obtener compras',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get('admin/users')
   async getAllUsers(@Req() req: Request) {
     try {

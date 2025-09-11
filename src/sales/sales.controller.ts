@@ -68,7 +68,11 @@ export class SalesController {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const sale = await this.salesService.createSale(dto, claims['sub']);
+      const sale = await this.salesService.createSale(
+        dto,
+        claims['sub'],
+        claims['email'],
+      );
       const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
       const qr = await this.paymentsService.generateQr(
         {
@@ -110,7 +114,9 @@ export class SalesController {
       const sale = await this.salesService.createSale(
         dto,
         claims['sub'],
+        claims['email'],
         claims['sub'],
+        claims['email'],
       );
       const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
       const qr = await this.paymentsService.generateQr(

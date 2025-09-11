@@ -1,4 +1,10 @@
-import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  HttpException,
+  HttpStatus,
+  forwardRef,
+} from '@nestjs/common';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -7,6 +13,9 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { SalesService } from '../sales/sales.service';
+import { EventsService } from '../events/events.service';
+import { BatchesService } from '../batches/batches.service';
 
 @Injectable()
 export class UsersService {
@@ -15,16 +24,21 @@ export class UsersService {
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
+    @Inject(forwardRef(() => SalesService))
+    private readonly salesService: SalesService,
+    private readonly eventsService: EventsService,
+    private readonly batchesService: BatchesService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
 
-  async createOrUpdateUser(userId: string, role: string) {
+  async createOrUpdateUser(userId: string, role: string, email: string) {
     const params = {
       TableName: this.tableName,
       Item: {
         id: userId,
         role,
+        email,
         purchasedTickets: [],
         soldTickets: role === 'Reseller' ? [] : undefined,
         createdAt: new Date().toISOString(),
@@ -35,6 +49,7 @@ export class UsersService {
       return {
         userId,
         role,
+        email,
         purchasedTickets: [],
         soldTickets: role === 'Reseller' ? [] : undefined,
       };
@@ -75,7 +90,7 @@ export class UsersService {
       UpdateExpression: updateExpressionParts.join(', '),
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
-      ReturnValues: 'ALL_NEW' as const, // Especificar como ReturnValue
+      ReturnValues: 'ALL_NEW' as const,
     };
 
     try {
@@ -121,6 +136,67 @@ export class UsersService {
     } catch (error) {
       throw new HttpException(
         'Error al listar usuarios',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getUserPurchases(userId: string) {
+    try {
+      // Obtener ventas del usuario
+      const salesResult = await this.docClient.send(
+        new ScanCommand({
+          TableName: 'Sales-v2',
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
+        }),
+      );
+      const sales = salesResult.Items || [];
+
+      // Obtener detalles de eventos, tandas y tickets
+      const purchases = await Promise.all(
+        sales.map(async (sale) => {
+          const event = await this.eventsService.findOne(sale.eventId);
+          const batch = await this.batchesService.findOne(
+            sale.eventId,
+            sale.batchId,
+          );
+          const ticketsResult = await this.docClient.send(
+            new ScanCommand({
+              TableName: 'Tickets-v2',
+              FilterExpression: 'saleId = :saleId',
+              ExpressionAttributeValues: { ':saleId': sale.id },
+            }),
+          );
+          const tickets = ticketsResult.Items || [];
+
+          return {
+            saleId: sale.id,
+            event: event
+              ? {
+                  id: event.id,
+                  name: event.name,
+                  from: event.from,
+                  to: event.to,
+                  location: event.location,
+                }
+              : null,
+            batch: batch
+              ? { id: batch.batchId, name: batch.name, price: batch.price }
+              : null,
+            quantity: sale.quantity,
+            total: sale.total,
+            status: sale.status,
+            tickets: tickets.map((ticket) => ticket.id),
+            createdAt: sale.createdAt,
+          };
+        }),
+      );
+
+      return purchases;
+    } catch (error) {
+      throw new HttpException(
+        'Error al obtener compras del usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
