@@ -1,4 +1,10 @@
-import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  HttpException,
+  HttpStatus,
+  forwardRef,
+} from '@nestjs/common';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -28,6 +34,7 @@ export class SalesService {
     private readonly eventsService: EventsService,
     private readonly batchesService: BatchesService,
     private readonly ticketsService: TicketsService,
+    @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
   ) {

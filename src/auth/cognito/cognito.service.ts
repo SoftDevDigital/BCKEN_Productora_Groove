@@ -13,15 +13,19 @@ import {
   AdminConfirmSignUpCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
+import { UsersService } from '../../users/users.service';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class CognitoService {
   private client: CognitoIdentityProviderClient;
   private lastResend: { [email: string]: number } = {};
-  private readonly validRoles = ['User', 'Reseller', 'Admin']; // Roles válidos
+  private readonly validRoles = ['User', 'Reseller', 'Admin'];
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly usersService: UsersService,
+  ) {
     this.client = new CognitoIdentityProviderClient({
       region: this.configService.get<string>('AWS_REGION'),
     });
@@ -60,17 +64,28 @@ export class CognitoService {
           { Name: 'given_name', Value: name },
           { Name: 'family_name', Value: last_name },
           { Name: 'custom:country', Value: 'default' },
-          { Name: 'custom:role', Value: 'User' }, // Siempre 'User'
+          { Name: 'custom:role', Value: 'User' },
         ],
       });
       const result = await this.client.send(command);
+      if (!result.UserSub) {
+        throw new InternalServerErrorException(
+          'No se pudo obtener el UserSub del usuario registrado.',
+        );
+      }
+      await this.usersService.createOrUpdateUser(result.UserSub, 'User', email);
       return {
-        UserSub: result.UserSub,
-        CodeDeliveryDetails: result.CodeDeliveryDetails,
+        statusCode: 201,
+        message:
+          'Usuario registrado exitosamente. Verifica tu email para confirmar.',
+        userSub: result.UserSub,
+        codeDeliveryDetails: result.CodeDeliveryDetails,
       };
     } catch (error) {
       if (error.name === 'UsernameExistsException') {
-        throw error; // Propagado al controller para 409
+        throw new BadRequestException(
+          'El email ya está registrado. Intenta con signin.',
+        );
       }
       if (error.name === 'InvalidParameterException') {
         throw new BadRequestException(
@@ -100,7 +115,15 @@ export class CognitoService {
           SECRET_HASH: secretHash,
         },
       });
-      return this.client.send(command);
+      const result = await this.client.send(command);
+      return {
+        statusCode: 200,
+        message: 'Login exitoso',
+        accessToken: result.AuthenticationResult?.AccessToken,
+        idToken: result.AuthenticationResult?.IdToken,
+        refreshToken: result.AuthenticationResult?.RefreshToken,
+        expiresIn: result.AuthenticationResult?.ExpiresIn,
+      };
     } catch (error) {
       if (error.name === 'NotAuthorizedException') {
         throw new BadRequestException('Credenciales incorrectas.');
@@ -128,7 +151,13 @@ export class CognitoService {
         Username: userSub,
         UserAttributes: [{ Name: 'custom:role', Value: role }],
       });
-      return this.client.send(command);
+      await this.client.send(command);
+      const user = await this.usersService.getUserProfile(userSub);
+      await this.usersService.createOrUpdateUser(userSub, role, user.email);
+      return {
+        statusCode: 200,
+        message: `Rol "${role}" asignado exitosamente al usuario ${userSub}`,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -146,7 +175,11 @@ export class CognitoService {
         ConfirmationCode: confirmationCode,
         SecretHash: secretHash,
       });
-      return this.client.send(command);
+      await this.client.send(command);
+      return {
+        statusCode: 200,
+        message: 'Email confirmado exitosamente. Ahora puedes iniciar sesión.',
+      };
     } catch (error) {
       if (error.name === 'CodeMismatchException') {
         throw new BadRequestException('Código de verificación incorrecto.');
@@ -175,7 +208,11 @@ export class CognitoService {
       });
       const result = await this.client.send(command);
       this.lastResend[email] = now;
-      return result;
+      return {
+        statusCode: 200,
+        message: 'Código reenviado exitosamente. Revisa tu email.',
+        codeDeliveryDetails: result.CodeDeliveryDetails,
+      };
     } catch (error) {
       if (error.name === 'UserNotFoundException') {
         throw new BadRequestException(
@@ -192,7 +229,11 @@ export class CognitoService {
         UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
         Username: username,
       });
-      return this.client.send(command);
+      await this.client.send(command);
+      return {
+        statusCode: 200,
+        message: 'Usuario confirmado manualmente',
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         'Error al confirmar usuario manualmente.',
