@@ -10,6 +10,7 @@ import { SalesModule } from './sales/sales.module';
 import { PaymentsModule } from './payments/payments.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { UsersModule } from './users/users.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { UsersModule } from './users/users.module';
     PaymentsModule,
     TicketsModule,
     UsersModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
