@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
 import { AWSSDKModule } from '../aws-sdk/aws-sdk.module';
@@ -11,9 +11,9 @@ import { BatchesModule } from '../batches/batches.module';
 @Module({
   imports: [
     AWSSDKModule,
-    SalesModule,
+    forwardRef(() => SalesModule),
     TicketsModule,
-    UsersModule,
+    forwardRef(() => UsersModule),
     EventsModule,
     BatchesModule,
   ],

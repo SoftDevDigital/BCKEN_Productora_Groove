@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { EventsModule } from '../events/events.module';
@@ -15,10 +15,10 @@ import { UsersModule } from '../users/users.module';
     AWSSDKModule,
     PaymentsModule,
     TicketsModule,
-    UsersModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [SalesController],
   providers: [SalesService],
-  exports: [SalesService], // Exportar SalesService
+  exports: [SalesService],
 })
 export class SalesModule {}
