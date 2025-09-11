@@ -6,6 +6,7 @@ import { BatchesModule } from '../batches/batches.module';
 import { AWSSDKModule } from '../aws-sdk/aws-sdk.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { TicketsModule } from '../tickets/tickets.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TicketsModule } from '../tickets/tickets.module';
     AWSSDKModule,
     PaymentsModule,
     TicketsModule,
+    UsersModule,
   ],
   controllers: [SalesController],
   providers: [SalesService],

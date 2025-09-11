@@ -9,6 +9,7 @@ import { BatchesModule } from './batches/batches.module';
 import { SalesModule } from './sales/sales.module';
 import { PaymentsModule } from './payments/payments.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TicketsModule } from './tickets/tickets.module';
     SalesModule,
     PaymentsModule,
     TicketsModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
