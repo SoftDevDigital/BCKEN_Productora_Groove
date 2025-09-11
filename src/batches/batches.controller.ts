@@ -58,7 +58,12 @@ export class BatchesController {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      return await this.batchesService.create(eventId, dto);
+      const result = await this.batchesService.create(eventId, dto);
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: 'Tanda creada exitosamente',
+        data: result,
+      };
     } catch (error) {
       throw new HttpException(
         'Error al crear tanda',
@@ -70,7 +75,12 @@ export class BatchesController {
   @Get()
   async findAll(@Param('eventId') eventId: string) {
     try {
-      return await this.batchesService.findAll(eventId);
+      const batches = await this.batchesService.findAll(eventId);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Tandas obtenidas exitosamente',
+        data: batches,
+      };
     } catch (error) {
       throw new HttpException(
         'Error al obtener tandas',
@@ -98,8 +108,15 @@ export class BatchesController {
       if (!updatedBatch) {
         throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
       }
-      return updatedBatch;
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Tanda actualizada exitosamente',
+        data: updatedBatch,
+      };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al actualizar tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -120,8 +137,14 @@ export class BatchesController {
       if (!result) {
         throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
       }
-      return { message: `Tanda ${batchId} eliminada` };
+      return {
+        statusCode: HttpStatus.OK,
+        message: `Tanda ${batchId} eliminada`,
+      };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al eliminar tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,

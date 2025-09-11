@@ -19,6 +19,7 @@ import * as crypto from 'crypto';
 export class CognitoService {
   private client: CognitoIdentityProviderClient;
   private lastResend: { [email: string]: number } = {};
+  private readonly validRoles = ['User', 'Reseller', 'Admin']; // Roles válidos
 
   constructor(private configService: ConfigService) {
     this.client = new CognitoIdentityProviderClient({
@@ -59,7 +60,7 @@ export class CognitoService {
           { Name: 'given_name', Value: name },
           { Name: 'family_name', Value: last_name },
           { Name: 'custom:country', Value: 'default' },
-          { Name: 'custom:role', Value: 'User' },
+          { Name: 'custom:role', Value: 'User' }, // Siempre 'User'
         ],
       });
       const result = await this.client.send(command);
@@ -117,6 +118,11 @@ export class CognitoService {
 
   async adminAssignRole(userSub: string, role: string) {
     try {
+      if (!this.validRoles.includes(role)) {
+        throw new BadRequestException(
+          'Rol inválido. Use: User, Reseller o Admin.',
+        );
+      }
       const command = new AdminUpdateUserAttributesCommand({
         UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
         Username: userSub,
@@ -124,6 +130,9 @@ export class CognitoService {
       });
       return this.client.send(command);
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Error al asignar rol.');
     }
   }
@@ -154,7 +163,6 @@ export class CognitoService {
       const now = Date.now();
       const lastResendTime = this.lastResend[email] || 0;
       if (now - lastResendTime < 60000) {
-        // Cambiado de 300000 (5 minutos) a 60000 (1 minuto)
         throw new BadRequestException(
           'Debes esperar 1 minuto desde el último reenvío.',
         );

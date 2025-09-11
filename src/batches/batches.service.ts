@@ -34,10 +34,10 @@ export class BatchesService {
         name: createBatchDto.name,
         totalTickets: createBatchDto.totalTickets,
         availableTickets: createBatchDto.totalTickets,
+        price: createBatchDto.price, // Nuevo campo
         createdAt: new Date().toISOString(),
       },
     };
-
     try {
       await this.docClient.send(new PutCommand(params));
       return { batchId, ...createBatchDto };
@@ -59,10 +59,26 @@ export class BatchesService {
     };
     try {
       const result = await this.docClient.send(new QueryCommand(params));
-      return result.Items;
+      return result.Items || [];
     } catch (error) {
       throw new HttpException(
         'Error al listar tandas',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async findOne(eventId: string, batchId: string) {
+    const params = {
+      TableName: this.tableName,
+      Key: { eventId, batchId },
+    };
+    try {
+      const result = await this.docClient.send(new GetCommand(params));
+      return result.Item;
+    } catch (error) {
+      throw new HttpException(
+        'Error al obtener tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -73,33 +89,45 @@ export class BatchesService {
     batchId: string,
     updateBatchDto: UpdateBatchDto,
   ) {
+    const updateExpressionParts: string[] = [];
+    const expressionAttributeNames: { [key: string]: string } = {};
+    const expressionAttributeValues: { [key: string]: any } = {};
+
+    if (updateBatchDto.name !== undefined) {
+      updateExpressionParts.push('#name = :name');
+      expressionAttributeNames['#name'] = 'name';
+      expressionAttributeValues[':name'] = updateBatchDto.name;
+    }
+    if (updateBatchDto.totalTickets !== undefined) {
+      updateExpressionParts.push('#totalTickets = :totalTickets');
+      updateExpressionParts.push('#availableTickets = :availableTickets');
+      expressionAttributeNames['#totalTickets'] = 'totalTickets';
+      expressionAttributeNames['#availableTickets'] = 'availableTickets';
+      expressionAttributeValues[':totalTickets'] = updateBatchDto.totalTickets;
+      expressionAttributeValues[':availableTickets'] =
+        updateBatchDto.totalTickets;
+    }
+    if (updateBatchDto.price !== undefined) {
+      updateExpressionParts.push('#price = :price');
+      expressionAttributeNames['#price'] = 'price';
+      expressionAttributeValues[':price'] = updateBatchDto.price;
+    }
+
+    if (updateExpressionParts.length === 0) {
+      throw new HttpException(
+        'No se proporcionaron datos para actualizar',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const params: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { eventId, batchId },
-      UpdateExpression:
-        'SET #name = :name, #totalTickets = :totalTickets, #availableTickets = :availableTickets',
-      ExpressionAttributeNames: {
-        '#name': 'name',
-        '#totalTickets': 'totalTickets',
-        '#availableTickets': 'availableTickets',
-      },
-      ExpressionAttributeValues: {
-        ':name': updateBatchDto.name,
-        ':totalTickets': updateBatchDto.totalTickets,
-        ':availableTickets': updateBatchDto.totalTickets,
-      },
+      UpdateExpression: 'SET ' + updateExpressionParts.join(', '),
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW',
     };
-
-    if (params.ExpressionAttributeValues) {
-      params.ExpressionAttributeValues = Object.fromEntries(
-        Object.entries(params.ExpressionAttributeValues).filter(
-          ([_, value]) => value !== undefined,
-        ),
-      );
-    } else {
-      params.ExpressionAttributeValues = {};
-    }
 
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
@@ -138,12 +166,11 @@ export class BatchesService {
       },
       ExpressionAttributeValues: {
         ':decrement': -quantity,
-        ':quantity': quantity, // Condición para evitar negativos
+        ':quantity': quantity,
       },
       ConditionExpression: '#availableTickets >= :quantity',
       ReturnValues: 'ALL_NEW',
     };
-
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
       return result.Attributes;

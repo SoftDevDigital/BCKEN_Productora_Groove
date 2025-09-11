@@ -7,6 +7,6 @@ import { AWSSDKModule } from '../aws-sdk/aws-sdk.module';
   imports: [AWSSDKModule],
   controllers: [EventsController],
   providers: [EventsService],
-  exports: [EventsService]
+  exports: [EventsService],
 })
 export class EventsModule {}
