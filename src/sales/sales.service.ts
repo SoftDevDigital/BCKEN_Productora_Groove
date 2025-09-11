@@ -3,16 +3,17 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
-  PutCommandInput,
   UpdateCommand,
-  UpdateCommandInput,
   GetCommand,
+  PutCommandInput,
+  UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
 import { TicketsService } from '../tickets/tickets.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class SalesService {
@@ -24,6 +25,7 @@ export class SalesService {
     private readonly eventsService: EventsService,
     private readonly batchesService: BatchesService,
     private readonly ticketsService: TicketsService,
+    private readonly usersService: UsersService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
   }
@@ -87,6 +89,11 @@ export class SalesService {
 
     try {
       await this.docClient.send(new PutCommand(params));
+      // Crear perfil de usuario si no existe
+      await this.usersService.createOrUpdateUser(userId, 'User');
+      if (resellerId) {
+        await this.usersService.createOrUpdateUser(resellerId, 'Reseller');
+      }
       return {
         id: saleId,
         eventId,
@@ -157,6 +164,13 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
         });
+        // Actualizar perfil de usuario y revendedor
+        const ticketIds = tickets.map((ticket) => ticket.ticketId);
+        await this.usersService.updateUserTickets(
+          sale.Item.userId,
+          ticketIds,
+          sale.Item.resellerId,
+        );
         return { ...result.Attributes, tickets };
       }
       return result.Attributes;
