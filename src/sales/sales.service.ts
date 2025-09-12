@@ -162,7 +162,7 @@ export class SalesService {
           sale.Item.batchId,
           sale.Item.quantity,
         );
-        // Generar tickets individuales
+        // Generar tickets individuales con QR
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -177,14 +177,15 @@ export class SalesService {
           ticketIds,
           sale.Item.resellerId,
         );
-        // Obtener email del usuario
+        // Obtener email del usuario y alias
         const user = await this.usersService.getUserProfile(sale.Item.userId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
         const batch = await this.batchesService.findOne(
           sale.Item.eventId,
           sale.Item.batchId,
         );
-        // Enviar email de confirmación
+        // Enviar email de confirmación con QRs
+        const qrLinks = tickets.map((ticket) => ticket.qrS3Url).join(', ');
         const emailParams = {
           Source:
             this.configService.get<string>('SES_EMAIL') ||
@@ -198,7 +199,7 @@ export class SalesService {
             },
             Body: {
               Text: {
-                Data: `Hola,\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Total: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
+                Data: `Hola ${user.alias || 'Usuario'},\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Importe abonado: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n- QRs: ${qrLinks}\n\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
               },
             },
           },
@@ -221,10 +222,7 @@ export class SalesService {
     const saleId = payment.external_reference;
 
     if (!saleId) {
-      throw new HttpException(
-        'No se encontró referencia de venta',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new HttpException('No se encontró referencia de venta', HttpStatus.BAD_REQUEST);
     }
 
     await this.confirmSale(saleId, status, paymentId);

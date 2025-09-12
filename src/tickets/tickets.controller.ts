@@ -5,6 +5,8 @@ import {
   Req,
   HttpException,
   HttpStatus,
+  Post,
+  Body,
 } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import type { Request } from 'express';
@@ -60,6 +62,64 @@ export class TicketsController {
       }
       throw new HttpException(
         'Error al validar ticket',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':ticketId/qr')
+  async getTicketQr(
+    @Param('ticketId') ticketId: string,
+    @Req() req: Request,
+  ) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const ticket = await this.ticketsService.validateTicket(ticketId);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'QR del ticket obtenido',
+        data: { qrS3Url: ticket.qrS3Url },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al obtener QR del ticket',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('admin/scan')
+  async scanTicket(
+    @Body() body: { ticketId: string },
+    @Req() req: Request,
+  ) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const ticket = await this.ticketsService.validateTicket(body.ticketId);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Ticket escaneado y válido',
+        data: {
+          ticketId: ticket.id,
+          saleId: ticket.saleId,
+          userId: ticket.userId,
+          eventId: ticket.eventId,
+          batchId: ticket.batchId,
+          status: ticket.status,
+          qrS3Url: ticket.qrS3Url,
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al escanear ticket',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
