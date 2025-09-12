@@ -4,7 +4,6 @@ import {
   HttpException,
   HttpStatus,
   forwardRef,
-  Logger,
 } from '@nestjs/common';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -25,8 +24,6 @@ import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
-import * as QRCode from 'qrcode';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class SalesService {
@@ -34,8 +31,6 @@ export class SalesService {
   private readonly docClient: DynamoDBDocumentClient;
   private readonly sesClient: SESClient;
   private readonly mpClient: MercadoPagoConfig;
-  private readonly s3Client: S3Client;
-  private readonly logger = new Logger(SalesService.name);
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
@@ -50,9 +45,8 @@ export class SalesService {
       region: this.configService.get<string>('AWS_REGION'),
     });
     this.mpClient = new MercadoPagoConfig({
-      accessToken: 'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390',
+      accessToken: 'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390', // Token hardcodeado
     });
-    this.s3Client = new S3Client({ region: this.configService.get<string>('AWS_REGION') });
   }
 
   private validateId(id: string, fieldName: string = 'ID'): void {
@@ -144,7 +138,7 @@ export class SalesService {
         status: 'pending',
       };
     } catch (error) {
-      throw new HttpException('Error al registrar la venta en DynamoDB', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException('Error al registrar la venta', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -154,8 +148,9 @@ export class SalesService {
 
     const preference = new Preference(this.mpClient);
     const apiBaseUrl = this.configService.get<string>('API_BASE_URL');
-    const defaultUrl = 'https://tu-dominio.com'; // Fallback público
-    const baseUrl = apiBaseUrl && apiBaseUrl.match(/^https?:\/\/[^\s/$.?#].[^\s]*$/) ? apiBaseUrl : defaultUrl;
+    if (!apiBaseUrl || !apiBaseUrl.match(/^https?:\/\/[^\s/$.?#].[^\s]*$/)) {
+      throw new HttpException('API_BASE_URL no está configurado o es inválido', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 
     const preferenceData = {
       items: [
@@ -168,20 +163,20 @@ export class SalesService {
         },
       ],
       back_urls: {
-        success: `${baseUrl}/payments/success`,
-        failure: `${baseUrl}/payments/failure`,
-        pending: `${baseUrl}/payments/pending`,
+        success: `${apiBaseUrl}/payments/success`,
+        failure: `${apiBaseUrl}/payments/failure`,
+        pending: `${apiBaseUrl}/payments/pending`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `${baseUrl}/sales/webhook`,
+      notification_url: `${apiBaseUrl}/sales/webhook`,
     };
 
     try {
       const response = await preference.create({ body: preferenceData });
       return response.init_point || '';
     } catch (error) {
-      throw new HttpException(`Error al generar link de pago con MercadoPago: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(`Error al generar link de pago: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -243,13 +238,12 @@ export class SalesService {
         paymentLink,
       };
     } catch (error) {
-      throw new HttpException('Error al enviar email de pago a SES', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException('Error al enviar email de pago', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async confirmSale(saleId: string, paymentStatus: string, paymentId: string) {
     this.validateId(saleId, 'saleId');
-    this.logger.debug(`Starting confirmation for saleId: ${saleId}, paymentStatus: ${paymentStatus}, paymentId: ${paymentId}`);
     const sale = await this.docClient.send(
       new GetCommand({
         TableName: this.tableName,
@@ -257,12 +251,10 @@ export class SalesService {
       }),
     );
     if (!sale.Item) {
-      this.logger.error(`Sale not found in DynamoDB for saleId: ${saleId}`);
-      throw new HttpException(`Venta con ID ${saleId} no encontrada en DynamoDB`, HttpStatus.NOT_FOUND);
+      throw new HttpException('Venta no encontrada', HttpStatus.NOT_FOUND);
     }
     if (sale.Item.status !== 'pending') {
-      this.logger.warn(`Sale already processed for saleId: ${saleId}, current status: ${sale.Item.status}`);
-      throw new HttpException(`Venta con ID ${saleId} ya procesada, estado: ${sale.Item.status}`, HttpStatus.BAD_REQUEST);
+      throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
     }
     const updateParams: UpdateCommandInput = {
       TableName: this.tableName,
@@ -283,118 +275,63 @@ export class SalesService {
     };
     try {
       const result = await this.docClient.send(new UpdateCommand(updateParams));
-      this.logger.debug(`Sale status updated successfully for saleId: ${saleId}`);
       if (paymentStatus === 'approved') {
-        this.logger.debug(`Processing approved payment for saleId: ${saleId}`);
         // Restar tickets
-        try {
-          await this.batchesService.decrementTickets(
-            sale.Item.eventId,
-            sale.Item.batchId,
-            sale.Item.quantity,
-          );
-          this.logger.debug(`Tickets decremented successfully for batchId: ${sale.Item.batchId}`);
-        } catch (batchError) {
-          this.logger.error(`Failed to decrement tickets for batchId ${sale.Item.batchId}: ${batchError.message}`);
-          throw new HttpException(`Error al restar tickets de la tanda ${sale.Item.batchId}: ${batchError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        await this.batchesService.decrementTickets(
+          sale.Item.eventId,
+          sale.Item.batchId,
+          sale.Item.quantity,
+        );
         // Generar tickets individuales
-        let tickets;
-        try {
-          tickets = await this.ticketsService.createTickets({
-            id: saleId,
-            userId: sale.Item.userId,
-            eventId: sale.Item.eventId,
-            batchId: sale.Item.batchId,
-            quantity: sale.Item.quantity,
-          });
-          this.logger.debug(`Tickets created successfully: ${JSON.stringify(tickets)}`);
-        } catch (ticketError) {
-          this.logger.error(`Failed to create tickets for saleId ${saleId}: ${ticketError.message}`);
-          throw new HttpException(`Error al crear tickets para la venta ${saleId}: ${ticketError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        const tickets = await this.ticketsService.createTickets({
+          id: saleId,
+          userId: sale.Item.userId,
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+          quantity: sale.Item.quantity,
+        });
         // Actualizar perfil de usuario y revendedor
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
-        try {
-          await this.usersService.updateUserTickets(
-            sale.Item.userId,
-            ticketIds,
-            sale.Item.resellerId,
-          );
-          this.logger.debug(`User profile updated with ticketIds: ${ticketIds}`);
-        } catch (userError) {
-          this.logger.error(`Failed to update user profile for userId ${sale.Item.userId}: ${userError.message}`);
-          throw new HttpException(`Error al actualizar el perfil del usuario ${sale.Item.userId}: ${userError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-
-        // Generar QR único por ticketId y subir a S3
-        const qrUrls: { [key: string]: string } = {};
-        for (const ticket of tickets) {
-          const qrData = `ticket:${ticket.ticketId}`;
-          try {
-            const qrImageBase64 = await QRCode.toDataURL(qrData, {
-              errorCorrectionLevel: 'H',
-              margin: 2,
-              width: 300,
-            });
-            const qrKey = `qrs/ticket-${ticket.ticketId}-${uuidv4()}.png`;
-            const s3Params = {
-              Bucket: this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2',
-              Key: qrKey,
-              Body: Buffer.from(qrImageBase64.split(',')[1], 'base64'),
-              ContentType: 'image/png',
-            };
-            await this.s3Client.send(new PutObjectCommand(s3Params));
-            qrUrls[ticket.ticketId] = `https://${this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2'}.s3.amazonaws.com/${qrKey}`;
-            this.logger.debug(`QR uploaded successfully for ticketId: ${ticket.ticketId}`);
-          } catch (s3Error) {
-            this.logger.error(`Failed to upload QR for ticket ${ticket.ticketId}: ${s3Error.message}`);
-            throw new HttpException(`Error al subir QR para ticket ${ticket.ticketId} a S3: ${s3Error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-          }
-        }
-
+        await this.usersService.updateUserTickets(
+          sale.Item.userId,
+          ticketIds,
+          sale.Item.resellerId,
+        );
         // Obtener email del usuario
-        let user;
-        try {
-          user = await this.usersService.getUserProfile(sale.Item.userId);
-          this.logger.debug(`User profile retrieved for userId: ${sale.Item.userId}`);
-        } catch (userError) {
-          this.logger.error(`Failed to retrieve user profile for userId ${sale.Item.userId}: ${userError.message}`);
-          throw new HttpException(`Error al obtener el perfil del usuario ${sale.Item.userId}: ${userError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        const user = await this.usersService.getUserProfile(sale.Item.userId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
-        const batch = await this.batchesService.findOne(sale.Item.eventId, sale.Item.batchId);
-
-        // Enviar email de confirmación con QR
-        try {
-          const emailParams = {
-            Source: this.configService.get<string>('SES_EMAIL') || 'tu-email@dominio.com',
-            Destination: {
-              ToAddresses: [user.email],
+        const batch = await this.batchesService.findOne(
+          sale.Item.eventId,
+          sale.Item.batchId,
+        );
+        // Enviar email de confirmación
+        const emailParams = {
+          Source:
+            this.configService.get<string>('SES_EMAIL') ||
+            'tu-email@dominio.com',
+          Destination: {
+            ToAddresses: [user.email],
+          },
+          Message: {
+            Subject: {
+              Data: `Confirmación de Compra - ${event?.name || 'Evento'}`,
             },
-            Message: {
-              Subject: {
-                Data: `Confirmación de Compra - ${event?.name || 'Evento'}`,
-              },
-              Body: {
-                Text: {
-                  Data: `Hola,\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Total: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n- QR para validación: ${Object.entries(qrUrls).map(([ticketId, url]) => `${ticketId}: ${url}`).join('\n')}\n\nPresenta el QR en el evento para validación.\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
-                },
+            Body: {
+              Text: {
+                Data: `Hola,\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Total: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
               },
             },
-          };
-          //await this.sesClient.send(new SendEmailCommand(emailParams));
-          //this.logger.debug(`Confirmation email sent successfully for saleId: ${saleId}`);
-        } catch (emailError) {
-          this.logger.error(`Failed to send confirmation email for saleId ${saleId}: ${emailError.message}`);
-          throw new HttpException(`Error al enviar email de confirmación para la venta ${saleId}: ${emailError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-        return { ...result.Attributes, tickets, qrUrls };
+          },
+        };
+        await this.sesClient.send(new SendEmailCommand(emailParams));
+        return { ...result.Attributes, tickets };
       }
       return result.Attributes;
     } catch (error) {
-      this.logger.error(`Unexpected error in confirmSale for saleId ${saleId}: ${error.message}`, error.stack);
-      throw new HttpException(`Error al confirmar la venta ${saleId}: Detalle - ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Error al confirmar la venta',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }
