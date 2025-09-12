@@ -37,7 +37,6 @@ export class UsersService {
     let alias: string;
     let attempts = 0;
     const maxAttempts = 5;
-
     // Generar alias único
     do {
       alias = generateAlias();
@@ -58,7 +57,6 @@ export class UsersService {
         );
       }
     } while (true);
-
     const params = {
       TableName: this.tableName,
       Item: {
@@ -97,21 +95,18 @@ export class UsersService {
     const updateExpressionParts: string[] = [];
     const expressionAttributeNames: { [key: string]: string } = {};
     const expressionAttributeValues: { [key: string]: any } = {};
-
     updateExpressionParts.push(
       'SET #purchasedTickets = list_append(if_not_exists(#purchasedTickets, :empty_list), :ticketIds)',
     );
     expressionAttributeNames['#purchasedTickets'] = 'purchasedTickets';
     expressionAttributeValues[':ticketIds'] = ticketIds;
     expressionAttributeValues[':empty_list'] = [];
-
     if (resellerId) {
       updateExpressionParts.push(
         'SET #soldTickets = list_append(if_not_exists(#soldTickets, :empty_list), :ticketIds)',
       );
       expressionAttributeNames['#soldTickets'] = 'soldTickets';
     }
-
     const params = {
       TableName: this.tableName,
       Key: { id: userId },
@@ -120,7 +115,6 @@ export class UsersService {
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW' as const,
     };
-
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
       return result.Attributes;
@@ -179,14 +173,10 @@ export class UsersService {
         }),
       );
       const sales = salesResult.Items || [];
-
       const purchases = await Promise.all(
         sales.map(async (sale) => {
           const event = await this.eventsService.findOne(sale.eventId);
-          const batch = await this.batchesService.findOne(
-            sale.eventId,
-            sale.batchId,
-          );
+          const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
           const ticketsResult = await this.docClient.send(
             new ScanCommand({
               TableName: 'Tickets-v2',
@@ -195,7 +185,6 @@ export class UsersService {
             }),
           );
           const tickets = ticketsResult.Items || [];
-
           return {
             saleId: sale.id,
             event: event
@@ -208,7 +197,10 @@ export class UsersService {
                 }
               : null,
             batch: batch
-              ? { id: batch.batchId, name: batch.name, price: batch.price }
+              ? {
+                  id: batch.batchId,
+                  name: batch.name,
+                }
               : null,
             quantity: sale.quantity,
             total: sale.total,
@@ -218,7 +210,6 @@ export class UsersService {
           };
         }),
       );
-
       return purchases;
     } catch (error) {
       throw new HttpException(
