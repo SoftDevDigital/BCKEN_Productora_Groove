@@ -16,6 +16,7 @@ import { BatchesService } from '../batches/batches.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class SalesService {
@@ -30,6 +31,7 @@ export class SalesService {
     private readonly ticketsService: TicketsService,
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
+    private readonly paymentsService: PaymentsService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
     this.sesClient = new SESClient({
@@ -46,13 +48,11 @@ export class SalesService {
   ) {
     const saleId = uuidv4();
     const { eventId, batchId, quantity, type } = createSaleDto;
-
     // Validar evento
     const event = await this.eventsService.findOne(eventId);
     if (!event) {
       throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
     }
-
     // Validar tanda y precio
     const batch = await this.batchesService.findOne(eventId, batchId);
     if (!batch || batch.availableTickets < quantity) {
@@ -61,7 +61,6 @@ export class SalesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-
     // Calcular precio y comisión
     const basePrice = batch.price || 10;
     let total = quantity * basePrice;
@@ -76,7 +75,6 @@ export class SalesService {
       commission = total * 0.1;
       total += commission;
     }
-
     // Registrar venta como pending
     const params: PutCommandInput = {
       TableName: this.tableName,
@@ -95,7 +93,6 @@ export class SalesService {
         createdAt: new Date().toISOString(),
       },
     };
-
     try {
       await this.docClient.send(new PutCommand(params));
       // Crear perfil de usuario si no existe
@@ -133,15 +130,12 @@ export class SalesService {
         Key: { id: saleId },
       }),
     );
-
     if (!sale.Item) {
       throw new HttpException('Venta no encontrada', HttpStatus.NOT_FOUND);
     }
-
     if (sale.Item.status !== 'pending') {
       throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
     }
-
     const updateParams: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { id: saleId },
@@ -159,7 +153,6 @@ export class SalesService {
       },
       ReturnValues: 'ALL_NEW' as const,
     };
-
     try {
       const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
@@ -184,7 +177,6 @@ export class SalesService {
           ticketIds,
           sale.Item.resellerId,
         );
-
         // Obtener email del usuario
         const user = await this.usersService.getUserProfile(sale.Item.userId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
@@ -192,7 +184,6 @@ export class SalesService {
           sale.Item.eventId,
           sale.Item.batchId,
         );
-
         // Enviar email de confirmación
         const emailParams = {
           Source:
@@ -212,9 +203,7 @@ export class SalesService {
             },
           },
         };
-
         await this.sesClient.send(new SendEmailCommand(emailParams));
-
         return { ...result.Attributes, tickets };
       }
       return result.Attributes;
@@ -224,5 +213,22 @@ export class SalesService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  async handleWebhook(paymentId: string) {
+    const payment = await this.paymentsService.getPaymentStatus(paymentId);
+    const status = payment.status;
+    const saleId = payment.external_reference;
+
+    if (!saleId) {
+      throw new HttpException(
+        'No se encontró referencia de venta',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.confirmSale(saleId, status, paymentId);
+
+    return { status: 'processed', saleId, paymentStatus: status };
   }
 }

@@ -12,7 +12,6 @@ import { SalesService } from './sales.service';
 import { PaymentsService } from '../payments/payments.service';
 import { BatchesService } from '../batches/batches.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { WebhookDto } from './dto/webhook.dto';
 import type { Request } from 'express';
 
 @Controller('sales')
@@ -78,7 +77,6 @@ export class SalesController {
         {
           title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId}`,
           amount: sale.total,
-          generateQrImage: true,
           saleId: sale.id,
         },
         sale.id,
@@ -86,7 +84,7 @@ export class SalesController {
       return {
         statusCode: HttpStatus.OK,
         message: 'Venta registrada como pendiente. Complete el pago.',
-        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
+        data: { ...sale, paymentLink: qr.paymentLink },
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -123,7 +121,6 @@ export class SalesController {
         {
           title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId} (Revendedor)`,
           amount: sale.total,
-          generateQrImage: true,
           saleId: sale.id,
         },
         sale.id,
@@ -132,7 +129,7 @@ export class SalesController {
         statusCode: HttpStatus.OK,
         message:
           'Venta por revendedor registrada como pendiente. Complete el pago.',
-        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
+        data: { ...sale, paymentLink: qr.paymentLink },
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -146,24 +143,18 @@ export class SalesController {
   }
 
   @Post('webhook')
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async handleWebhook(@Body() dto: WebhookDto) {
+  async handleWebhook(@Body() body: any) {
     try {
-      const { saleId, paymentStatus, paymentId } = dto;
-      const sale = await this.salesService.confirmSale(
-        saleId,
-        paymentStatus,
-        paymentId,
-      );
+      if (body.action === 'payment.updated') {
+        const paymentId = body.data.id;
+        await this.salesService.handleWebhook(paymentId);
+      }
       return {
         statusCode: HttpStatus.OK,
-        message: `Venta actualizada: ${paymentStatus}`,
-        data: sale,
+        message: 'Notificación recibida',
       };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      console.error('Error en webhook:', error);
       throw new HttpException(
         'Error al procesar webhook',
         HttpStatus.INTERNAL_SERVER_ERROR,
