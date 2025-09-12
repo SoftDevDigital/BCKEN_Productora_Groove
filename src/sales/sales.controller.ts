@@ -9,9 +9,9 @@ import {
   Req,
 } from '@nestjs/common';
 import { SalesService } from './sales.service';
-import { PaymentsService } from '../payments/payments.service';
 import { BatchesService } from '../batches/batches.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { GeneratePaymentDto } from './dto/generate-payment.dto';
 import { WebhookDto } from './dto/webhook.dto';
 import type { Request } from 'express';
 
@@ -19,7 +19,6 @@ import type { Request } from 'express';
 export class SalesController {
   constructor(
     private readonly salesService: SalesService,
-    private readonly paymentsService: PaymentsService,
     private readonly batchesService: BatchesService,
   ) {}
 
@@ -32,9 +31,7 @@ export class SalesController {
     if (!claims) {
       const token = req.headers['authorization']?.replace('Bearer ', '');
       if (token) {
-        claims = JSON.parse(
-          Buffer.from(token.split('.')[1], 'base64').toString(),
-        );
+        claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
       }
     }
     return claims;
@@ -49,10 +46,7 @@ export class SalesController {
   private ensureReseller(claims: any) {
     const userRole = claims?.['custom:role'] || 'User';
     if (userRole !== 'Reseller') {
-      throw new HttpException(
-        'No autorizado: Requiere rol Reseller',
-        HttpStatus.FORBIDDEN,
-      );
+      throw new HttpException('No autorizado: Requiere rol Reseller', HttpStatus.FORBIDDEN);
     }
   }
 
@@ -63,39 +57,20 @@ export class SalesController {
       const claims = this.getClaims(req);
       this.ensureAuthenticated(claims);
       if (dto.type !== 'direct') {
-        throw new HttpException(
-          'Use /sales/reseller para ventas por revendedor',
-          HttpStatus.BAD_REQUEST,
-        );
+        throw new HttpException('Use /sales/reseller para ventas por revendedor', HttpStatus.BAD_REQUEST);
       }
-      const sale = await this.salesService.createSale(
-        dto,
-        claims['sub'],
-        claims['email'],
-      );
-      const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
-      const qr = await this.paymentsService.generateQr(
-        {
-          title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId}`,
-          amount: sale.total,
-          generateQrImage: true,
-          saleId: sale.id,
-        },
-        sale.id,
-      );
+      const sale = await this.salesService.createSale(dto, claims['sub'], claims['email']);
+      const paymentLink = await this.salesService.generatePaymentLink(sale.id, sale.total, `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId}`);
       return {
         statusCode: HttpStatus.OK,
         message: 'Venta registrada como pendiente. Complete el pago.',
-        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
+        data: { ...sale, paymentLink },
       };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new HttpException(
-        'Error al procesar la compra',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new HttpException('Error al procesar la compra', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -106,42 +81,39 @@ export class SalesController {
       const claims = this.getClaims(req);
       this.ensureReseller(claims);
       if (dto.type !== 'reseller') {
-        throw new HttpException(
-          'Use /sales para ventas directas',
-          HttpStatus.BAD_REQUEST,
-        );
+        throw new HttpException('Use /sales para ventas directas', HttpStatus.BAD_REQUEST);
       }
-      const sale = await this.salesService.createSale(
-        dto,
-        claims['sub'],
-        claims['email'],
-        claims['sub'],
-        claims['email'],
-      );
-      const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
-      const qr = await this.paymentsService.generateQr(
-        {
-          title: `Compra de ${dto.quantity} ticket(s) para evento ${dto.eventId} (Revendedor)`,
-          amount: sale.total,
-          generateQrImage: true,
-          saleId: sale.id,
-        },
-        sale.id,
-      );
+      const sale = await this.salesService.createSale(dto, claims['sub'], claims['email'], claims['sub'], claims['email']);
       return {
         statusCode: HttpStatus.OK,
-        message:
-          'Venta por revendedor registrada como pendiente. Complete el pago.',
-        data: { ...sale, paymentLink: qr.paymentLink, qrS3Url: qr.qrS3Url },
+        message: 'Venta por revendedor registrada como pendiente. Complete el pago.',
+        data: { ...sale, paymentLink: sale.id }, // Placeholder para revendedores
       };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new HttpException(
-        'Error al procesar la compra por revendedor',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new HttpException('Error al procesar la compra por revendedor', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('reseller/generate-payment')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async generatePayment(@Body() dto: GeneratePaymentDto, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureReseller(claims);
+      const result = await this.salesService.generatePaymentForUser(dto, claims['sub'], claims['email']);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Link de pago generado y enviado al usuario.',
+        data: result,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Error al generar link de pago', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -150,11 +122,7 @@ export class SalesController {
   async handleWebhook(@Body() dto: WebhookDto) {
     try {
       const { saleId, paymentStatus, paymentId } = dto;
-      const sale = await this.salesService.confirmSale(
-        saleId,
-        paymentStatus,
-        paymentId,
-      );
+      const sale = await this.salesService.confirmSale(saleId, paymentStatus, paymentId);
       return {
         statusCode: HttpStatus.OK,
         message: `Venta actualizada: ${paymentStatus}`,
@@ -164,10 +132,7 @@ export class SalesController {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new HttpException(
-        'Error al procesar webhook',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new HttpException('Error al procesar webhook', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

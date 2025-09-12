@@ -13,7 +13,7 @@ export class PaymentsService {
 
   constructor(private configService: ConfigService) {
     const accessToken =
-      'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390';
+      'APP_USR-5306379279497262-040223-502d8e14af5e69cc5270a2516b246c65-2369426390';
     if (!accessToken) {
       throw new BadRequestException(
         'MERCADO_PAGO_ACCESS_TOKEN is not defined in environment variables',
@@ -43,9 +43,9 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `${this.configService.get<string>('API_BASE_URL')}/payments/success`,
-        failure: `${this.configService.get<string>('API_BASE_URL')}/payments/failure`,
-        pending: `${this.configService.get<string>('API_BASE_URL')}/payments/pending`,
+        success: `https://api.farmaciamarquezcity.com/payment/success`,
+        failure: `https://api.farmaciamarquezcity.com/payment/failure`,
+        pending: `https://api.farmaciamarquezcity.com/payment/pending`,
       },
       auto_return: 'approved',
       external_reference: saleId,
