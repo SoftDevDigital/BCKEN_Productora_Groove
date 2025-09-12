@@ -16,7 +16,6 @@ import {
 import { SalesService } from '../sales/sales.service';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
-import { generateAlias } from '../utils/generate-alias';
 
 @Injectable()
 export class UsersService {
@@ -34,38 +33,12 @@ export class UsersService {
   }
 
   async createOrUpdateUser(userId: string, role: string, email: string) {
-    let alias: string;
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    // Generar alias único
-    do {
-      alias = generateAlias();
-      const existing = await this.docClient.send(
-        new ScanCommand({
-          TableName: this.tableName,
-          FilterExpression: '#alias = :alias',
-          ExpressionAttributeNames: { '#alias': 'alias' },
-          ExpressionAttributeValues: { ':alias': alias },
-        }),
-      );
-      if (existing.Items?.length === 0) break;
-      attempts++;
-      if (attempts >= maxAttempts) {
-        throw new HttpException(
-          'No se pudo generar un alias único',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-    } while (true);
-
     const params = {
       TableName: this.tableName,
       Item: {
         id: userId,
         role,
         email,
-        alias,
         purchasedTickets: [],
         soldTickets: role === 'Reseller' ? [] : undefined,
         createdAt: new Date().toISOString(),
@@ -77,7 +50,6 @@ export class UsersService {
         userId,
         role,
         email,
-        alias,
         purchasedTickets: [],
         soldTickets: role === 'Reseller' ? [] : undefined,
       };
@@ -171,6 +143,7 @@ export class UsersService {
 
   async getUserPurchases(userId: string) {
     try {
+      // Obtener ventas del usuario
       const salesResult = await this.docClient.send(
         new ScanCommand({
           TableName: 'Sales-v2',
@@ -180,6 +153,7 @@ export class UsersService {
       );
       const sales = salesResult.Items || [];
 
+      // Obtener detalles de eventos, tandas y tickets
       const purchases = await Promise.all(
         sales.map(async (sale) => {
           const event = await this.eventsService.findOne(sale.eventId);
@@ -223,24 +197,6 @@ export class UsersService {
     } catch (error) {
       throw new HttpException(
         'Error al obtener compras del usuario',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  async findUserByAlias(alias: string) {
-    const params = {
-      TableName: this.tableName,
-      FilterExpression: '#alias = :alias',
-      ExpressionAttributeNames: { '#alias': 'alias' },
-      ExpressionAttributeValues: { ':alias': alias },
-    };
-    try {
-      const result = await this.docClient.send(new ScanCommand(params));
-      return result.Items?.[0] || null;
-    } catch (error) {
-      throw new HttpException(
-        'Error al buscar usuario por alias',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
