@@ -68,10 +68,7 @@ export class TicketsController {
   }
 
   @Get(':ticketId/qr')
-  async getTicketQr(
-    @Param('ticketId') ticketId: string,
-    @Req() req: Request,
-  ) {
+  async getTicketQr(@Param('ticketId') ticketId: string, @Req() req: Request) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
@@ -93,33 +90,35 @@ export class TicketsController {
   }
 
   @Post('admin/scan')
-  async scanTicket(
-    @Body() body: { ticketId: string },
+  async scanTickets(
+    @Body() body: { ticketIds: string[] },
     @Req() req: Request,
   ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const ticket = await this.ticketsService.validateTicket(body.ticketId);
+      if (
+        !body.ticketIds ||
+        !Array.isArray(body.ticketIds) ||
+        body.ticketIds.length === 0
+      ) {
+        throw new HttpException(
+          'Se requiere una lista de ticketIds',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const results = await this.ticketsService.scanTickets(body.ticketIds);
       return {
         statusCode: HttpStatus.OK,
-        message: 'Ticket escaneado y válido',
-        data: {
-          ticketId: ticket.id,
-          saleId: ticket.saleId,
-          userId: ticket.userId,
-          eventId: ticket.eventId,
-          batchId: ticket.batchId,
-          status: ticket.status,
-          qrS3Url: ticket.qrS3Url,
-        },
+        message: 'Tickets escaneados',
+        data: results,
       };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        'Error al escanear ticket',
+        'Error al escanear tickets',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

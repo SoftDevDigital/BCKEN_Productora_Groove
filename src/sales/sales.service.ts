@@ -222,7 +222,10 @@ export class SalesService {
     const saleId = payment.external_reference;
 
     if (!saleId) {
-      throw new HttpException('No se encontró referencia de venta', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'No se encontró referencia de venta',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await this.confirmSale(saleId, status, paymentId);
