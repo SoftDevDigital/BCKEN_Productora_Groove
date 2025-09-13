@@ -25,6 +25,7 @@ export class PaymentsController {
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
+    console.log("ENTROOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     console.log('handleSuccess called:', { saleId, paymentId }); // Log para debug
     try {
       if (!saleId || !paymentId) {
@@ -71,7 +72,6 @@ export class PaymentsController {
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
-    console.log('handleFailure called:', { saleId, paymentId }); // Log para debug
     try {
       if (!saleId || !paymentId) {
         throw new HttpException(
@@ -80,7 +80,6 @@ export class PaymentsController {
         );
       }
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      console.log('Payment status:', payment); // Log para debug
       await this.salesService.confirmSale(saleId, 'rejected', paymentId);
       const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
       if (!frontendUrl) {
@@ -108,7 +107,6 @@ export class PaymentsController {
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
-    console.log('handlePending called:', { saleId, paymentId }); // Log para debug
     try {
       if (!saleId || !paymentId) {
         throw new HttpException(
