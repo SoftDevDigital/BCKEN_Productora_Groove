@@ -25,7 +25,7 @@ export class PaymentsController {
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
-    console.log("ENTROOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+    console.log('ENTROOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO');
     console.log('handleSuccess called:', { saleId, paymentId }); // Log para debug
     try {
       if (!saleId || !paymentId) {

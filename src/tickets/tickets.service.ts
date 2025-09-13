@@ -36,27 +36,22 @@ export class TicketsService {
     batchId: string;
     quantity: number;
   }) {
-    const tickets: Array<{
-      ticketId: string;
-      saleId: string;
-      qrS3Url: string;
-    }> = [];
+    const tickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
+    const bucket = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
     for (let i = 0; i < sale.quantity; i++) {
       const ticketId = nanoid(6);
       const qrData = `ticketId:${ticketId}`;
-      const qrImageBase64 = await QRCode.toDataURL(qrData);
-      const qrKey = `tickets-qr/${ticketId}-${uuidv4()}.png`;
+      const qrImageBuffer = await QRCode.toBuffer(qrData, { type: 'png' });
+      const qrKey = `qrs/ticket-${ticketId}-${uuidv4()}.png`;
       await this.s3Client.send(
         new PutObjectCommand({
-          Bucket:
-            this.configService.get<string>('S3_BUCKET') ||
-            'ticket-qr-bucket-dev-v2',
+          Bucket: bucket,
           Key: qrKey,
-          Body: Buffer.from(qrImageBase64.split(',')[1], 'base64'),
+          Body: qrImageBuffer,
           ContentType: 'image/png',
         }),
       );
-      const qrS3Url = `https://${this.configService.get<string>('S3_BUCKET')}.s3.amazonaws.com/${qrKey}`;
+      const qrS3Url = `https://${bucket}.s3.amazonaws.com/${qrKey}`;
       const params = {
         TableName: this.tableName,
         Item: {

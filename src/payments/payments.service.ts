@@ -8,7 +8,8 @@ export class PaymentsService {
   public client: MercadoPagoConfig;
 
   constructor(private configService: ConfigService) {
-    const accessToken = 'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390'
+    const accessToken =
+      'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390';
     if (!accessToken) {
       throw new BadRequestException(
         'MERCADO_PAGO_ACCESS_TOKEN is not defined in environment variables',
@@ -31,29 +32,29 @@ export class PaymentsService {
     }
 
     const preferenceData = {
-  items: [
-    {
-      id: `sale-${saleId}`,
-      title: dto.title,
-      unit_price: dto.amount,
-      quantity: 1,
-      currency_id: 'ARS',
-    },
-  ],
-  payment_methods: {
-    excluded_payment_methods: [],
-    excluded_payment_types: [],
-    installments: 1,
-  },
-  back_urls: {
-    success: `https://40da43ddbfec.ngrok-free.app/payments/success?saleId=${saleId}`,
-    failure: `https://40da43ddbfec.ngrok-free.app/payments/failure?saleId=${saleId}`,
-    pending: `https://40da43ddbfec.ngrok-free.app/payments/pending?saleId=${saleId}`,
-  },
-  auto_return: 'approved',
-  external_reference: saleId,
-  notification_url: `https://40da43ddbfec.ngrok-free.app/sales/webhook`,
-};
+      items: [
+        {
+          id: `sale-${saleId}`,
+          title: dto.title,
+          unit_price: dto.amount,
+          quantity: 1,
+          currency_id: 'ARS',
+        },
+      ],
+      payment_methods: {
+        excluded_payment_methods: [],
+        excluded_payment_types: [],
+        installments: 1,
+      },
+      back_urls: {
+        success: `https://40da43ddbfec.ngrok-free.app/payments/success?saleId=${saleId}`,
+        failure: `https://40da43ddbfec.ngrok-free.app/payments/failure?saleId=${saleId}`,
+        pending: `https://40da43ddbfec.ngrok-free.app/payments/pending?saleId=${saleId}`,
+      },
+      auto_return: 'approved',
+      external_reference: saleId,
+      notification_url: `https://40da43ddbfec.ngrok-free.app/sales/webhook`,
+    };
 
     try {
       const response = await preference.create({ body: preferenceData });

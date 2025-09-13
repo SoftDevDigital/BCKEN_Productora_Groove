@@ -8,7 +8,8 @@ import {
   PutCommandInput,
   UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { EventsService } from '../events/events.service';
@@ -17,12 +18,14 @@ import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from '../payments/payments.service';
+import { Readable } from 'stream';
 
 @Injectable()
 export class SalesService {
   private readonly tableName = 'Sales-v2';
   private readonly docClient: DynamoDBDocumentClient;
   private readonly sesClient: SESClient;
+  private readonly s3Client: S3Client;
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
@@ -37,6 +40,9 @@ export class SalesService {
     this.sesClient = new SESClient({
       region: this.configService.get<string>('AWS_REGION'),
     });
+    this.s3Client = new S3Client({
+      region: this.configService.get<string>('AWS_REGION'),
+    });
   }
 
   async createSale(
@@ -48,12 +54,10 @@ export class SalesService {
   ) {
     const saleId = uuidv4();
     const { eventId, batchId, quantity, type } = createSaleDto;
-    // Validar evento
     const event = await this.eventsService.findOne(eventId);
     if (!event) {
       throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
     }
-    // Validar tanda y precio
     const batch = await this.batchesService.findOne(eventId, batchId);
     if (!batch || batch.availableTickets < quantity) {
       throw new HttpException(
@@ -61,7 +65,6 @@ export class SalesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    // Calcular precio y comisión
     const basePrice = batch.price || 10;
     let total = quantity * basePrice;
     let commission = 0;
@@ -75,7 +78,6 @@ export class SalesService {
       commission = total * 0.1;
       total += commission;
     }
-    // Registrar venta como pending
     const params: PutCommandInput = {
       TableName: this.tableName,
       Item: {
@@ -95,7 +97,6 @@ export class SalesService {
     };
     try {
       await this.docClient.send(new PutCommand(params));
-      // Crear perfil de usuario si no existe
       await this.usersService.createOrUpdateUser(userId, 'User', email);
       if (resellerId && resellerEmail) {
         await this.usersService.createOrUpdateUser(
@@ -154,15 +155,16 @@ export class SalesService {
       ReturnValues: 'ALL_NEW' as const,
     };
     try {
+      console.log('Updating sale status:', { saleId, paymentStatus });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
-        // Restar tickets
+        console.log('Decrementing tickets:', { eventId: sale.Item.eventId, batchId: sale.Item.batchId });
         await this.batchesService.decrementTickets(
           sale.Item.eventId,
           sale.Item.batchId,
           sale.Item.quantity,
         );
-        // Generar tickets individuales con QR
+        console.log('Creating tickets for sale:', saleId);
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -170,47 +172,105 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
         });
-        // Actualizar perfil de usuario y revendedor
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
+        console.log('Updating user tickets:', { userId: sale.Item.userId, ticketIds });
         await this.usersService.updateUserTickets(
           sale.Item.userId,
           ticketIds,
           sale.Item.resellerId,
         );
-        // Obtener email del usuario y alias
+        console.log('Fetching user profile:', sale.Item.userId);
         const user = await this.usersService.getUserProfile(sale.Item.userId);
+        console.log('Fetching event:', sale.Item.eventId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
+        console.log('Fetching batch:', { eventId: sale.Item.eventId, batchId: sale.Item.batchId });
         const batch = await this.batchesService.findOne(
           sale.Item.eventId,
           sale.Item.batchId,
         );
-        // Enviar email de confirmación con QRs
-        const qrLinks = tickets.map((ticket) => ticket.qrS3Url).join(', ');
+        console.log('Preparing QR attachments:', ticketIds);
+        const qrAttachments = await Promise.all(
+          tickets.map(async (ticket, index) => {
+            const qrKey = ticket.qrS3Url.split('.amazonaws.com/')[1];
+            const s3Response = await this.s3Client.send(
+              new GetObjectCommand({
+                Bucket: this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2',
+                Key: qrKey,
+              }),
+            );
+            const body = await new Promise<Buffer>((resolve, reject) => {
+              const chunks: Buffer[] = [];
+              (s3Response.Body as Readable).on('data', (chunk) => chunks.push(chunk));
+              (s3Response.Body as Readable).on('end', () => resolve(Buffer.concat(chunks)));
+              (s3Response.Body as Readable).on('error', reject);
+            });
+            return {
+              ContentType: 'image/png',
+              Filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+              ContentID: `qr-${ticket.ticketId}`,
+              Content: body,
+            };
+          }),
+        );
+        console.log('Preparing email body');
+        const emailBody = `
+Hola ${user.alias || 'Usuario'},
+
+Tu compra ha sido confirmada exitosamente.
+
+**Comprobante de Pago**
+- Venta ID: ${saleId}
+- Evento: ${event?.name || 'Desconocido'}
+- Tanda: ${batch?.name || 'Desconocida'}
+- Cantidad de tickets: ${sale.Item.quantity}
+- Precio por ticket: $${sale.Item.basePrice}
+- Comisión: $${sale.Item.commission}
+- Importe total abonado: $${sale.Item.total}
+- Tickets: ${ticketIds.join(', ')}
+
+**Códigos QR Únicos**
+Los códigos QR de tus tickets están adjuntos en este correo.
+
+¡Gracias por tu compra!
+Equipo Groove Tickets
+        `;
+        const rawEmail = [
+          `From: ${this.configService.get<string>('SES_EMAIL') || 'alexis@laikad.com'}`,
+          `To: ${user.email}`,
+          `Subject: Confirmación de Compra - ${event?.name || 'Evento'}`,
+          'MIME-Version: 1.0',
+          'Content-Type: multipart/mixed; boundary="boundary"',
+          '',
+          '--boundary',
+          'Content-Type: text/plain; charset=UTF-8',
+          '',
+          emailBody,
+          ...qrAttachments.map((attachment) => [
+            '--boundary',
+            `Content-Type: ${attachment.ContentType}`,
+            `Content-Disposition: attachment; filename="${attachment.Filename}"`,
+            `Content-Transfer-Encoding: base64`,
+            `Content-ID: <${attachment.ContentID}>`,
+            '',
+            attachment.Content.toString('base64'),
+          ].join('\n')),
+          '--boundary--',
+        ].join('\n');
+        console.log('Sending email to:', user.email);
         const emailParams = {
-          Source:
-            this.configService.get<string>('SES_EMAIL') ||
-            'tu-email@dominio.com',
-          Destination: {
-            ToAddresses: [user.email],
-          },
-          Message: {
-            Subject: {
-              Data: `Confirmación de Compra - ${event?.name || 'Evento'}`,
-            },
-            Body: {
-              Text: {
-                Data: `Hola ${user.alias || 'Usuario'},\n\nTu compra ha sido confirmada exitosamente.\n\nDetalles de la compra:\n- Venta ID: ${saleId}\n- Evento: ${event?.name || 'Desconocido'}\n- Tanda: ${batch?.name || 'Desconocida'}\n- Cantidad: ${sale.Item.quantity}\n- Importe abonado: $${sale.Item.total}\n- Tickets: ${ticketIds.join(', ')}\n- QRs: ${qrLinks}\n\n¡Gracias por tu compra!\nEquipo Groove Tickets`,
-              },
-            },
+          RawMessage: {
+            Data: Buffer.from(rawEmail),
           },
         };
-        await this.sesClient.send(new SendEmailCommand(emailParams));
+        await this.sesClient.send(new SendRawEmailCommand(emailParams));
+        console.log('Email sent successfully');
         return { ...result.Attributes, tickets };
       }
       return result.Attributes;
     } catch (error) {
+      console.error('Error in confirmSale:', error);
       throw new HttpException(
-        'Error al confirmar la venta',
+        `Error al confirmar la venta: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -222,10 +282,7 @@ export class SalesService {
     const saleId = payment.external_reference;
 
     if (!saleId) {
-      throw new HttpException(
-        'No se encontró referencia de venta',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new HttpException('No se encontró referencia de venta', HttpStatus.BAD_REQUEST);
     }
 
     await this.confirmSale(saleId, status, paymentId);
