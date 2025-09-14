@@ -16,4 +16,7 @@ export class UpdateEventDto {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @IsOptional()
+  image?: any; // Imagen del evento (enviada como archivo multipart/form-data)
 }

@@ -11,7 +11,10 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -50,10 +53,16 @@ export class EventsController {
 
   @Post()
   @UsePipes(new ValidationPipe({ transform: true }))
-  async create(@Body() createEventDto: CreateEventDto, @Req() req: Request) {
+  @UseInterceptors(FileInterceptor('image'))
+  async create(
+    @Body() createEventDto: CreateEventDto,
+    @UploadedFile() image: any,
+    @Req() req: Request,
+  ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
+      createEventDto.image = image; // Asignar la imagen al DTO
       const event = await this.eventsService.create(createEventDto);
       return {
         statusCode: HttpStatus.CREATED,
@@ -113,9 +122,11 @@ export class EventsController {
 
   @Put(':id')
   @UsePipes(new ValidationPipe({ transform: true }))
+  @UseInterceptors(FileInterceptor('image'))
   async update(
     @Param('id') id: string,
     @Body() updateEventDto: UpdateEventDto,
+    @UploadedFile() image: any,
     @Req() req: Request,
   ) {
     try {
@@ -125,6 +136,7 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
+      updateEventDto.image = image; // Asignar la imagen al DTO
       const updatedEvent = await this.eventsService.update(id, updateEventDto);
       return {
         statusCode: HttpStatus.OK,

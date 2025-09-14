@@ -9,24 +9,63 @@ import {
   DeleteCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class EventsService {
   private readonly tableName = 'Events-v2';
   private readonly batchesTableName = 'Batches-v2';
   private readonly docClient: DynamoDBDocumentClient;
+  private readonly s3Client: S3Client;
+  private readonly bucketName: string;
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
+    private readonly configService: ConfigService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
+    this.s3Client = new S3Client({
+      region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
+    });
+    this.bucketName =
+      this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
   }
 
   async create(createEventDto: CreateEventDto) {
     const eventId = uuidv4();
+    let imageUrl: string | undefined;
+
+    // Subir imagen a S3 si se proporciona
+    if (createEventDto.image) {
+      const fileExtension = createEventDto.image.mimetype.split('/')[1];
+      if (!['png', 'jpeg', 'jpg'].includes(fileExtension)) {
+        throw new HttpException(
+          'Solo se permiten imágenes PNG o JPEG',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (createEventDto.image.size > 5 * 1024 * 1024) {
+        throw new HttpException(
+          'La imagen no debe exceder los 5MB',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const imageKey = `events/event-${eventId}-${uuidv4()}.${fileExtension}`;
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: imageKey,
+          Body: createEventDto.image.buffer,
+          ContentType: createEventDto.image.mimetype,
+        }),
+      );
+      imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
+    }
+
     const params = {
       TableName: this.tableName,
       Item: {
@@ -35,12 +74,14 @@ export class EventsService {
         from: createEventDto.from,
         to: createEventDto.to,
         location: createEventDto.location,
+        imageUrl, // Guardar URL de la imagen (si existe)
         createdAt: new Date().toISOString(),
       },
     };
+
     try {
       await this.docClient.send(new PutCommand(params));
-      return { id: eventId, ...createEventDto };
+      return { id: eventId, ...createEventDto, imageUrl };
     } catch (error) {
       throw new HttpException(
         'Error al crear evento',
@@ -84,6 +125,36 @@ export class EventsService {
     const updateExpressionParts: string[] = [];
     const expressionAttributeNames: { [key: string]: string } = {};
     const expressionAttributeValues: { [key: string]: any } = {};
+
+    // Subir nueva imagen a S3 si se proporciona
+    if (updateEventDto.image) {
+      const fileExtension = updateEventDto.image.mimetype.split('/')[1];
+      if (!['png', 'jpeg', 'jpg'].includes(fileExtension)) {
+        throw new HttpException(
+          'Solo se permiten imágenes PNG o JPEG',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (updateEventDto.image.size > 5 * 1024 * 1024) {
+        throw new HttpException(
+          'La imagen no debe exceder los 5MB',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const imageKey = `events/event-${id}-${uuidv4()}.${fileExtension}`;
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: imageKey,
+          Body: updateEventDto.image.buffer,
+          ContentType: updateEventDto.image.mimetype,
+        }),
+      );
+      const imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
+      updateExpressionParts.push('#imageUrl = :imageUrl');
+      expressionAttributeNames['#imageUrl'] = 'imageUrl';
+      expressionAttributeValues[':imageUrl'] = imageUrl;
+    }
 
     if (updateEventDto.name) {
       updateExpressionParts.push('#name = :name');
@@ -136,7 +207,6 @@ export class EventsService {
   }
 
   async delete(id: string) {
-    // Buscar todas las tandas asociadas al evento
     const batchParams = {
       TableName: this.batchesTableName,
       KeyConditionExpression: 'eventId = :eventId',
@@ -146,23 +216,6 @@ export class EventsService {
     };
 
     try {
-      // Opcional: Validar si hay ventas asociadas (descomentar si es necesario)
-      /*
-      const salesParams = {
-        TableName: 'Sales-v2',
-        FilterExpression: 'eventId = :eventId',
-        ExpressionAttributeValues: { ':eventId': id },
-      };
-      const salesResult = await this.docClient.send(new ScanCommand(salesParams));
-      if (salesResult.Items && salesResult.Items.length > 0) {
-        throw new HttpException(
-          'No se puede eliminar el evento porque tiene ventas asociadas',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      */
-
-      // Obtener y eliminar todas las tandas asociadas
       const batchResult = await this.docClient.send(
         new QueryCommand(batchParams),
       );
@@ -176,7 +229,6 @@ export class EventsService {
         await this.docClient.send(new DeleteCommand(deleteBatchParams));
       }
 
-      // Eliminar el evento
       const eventParams = {
         TableName: this.tableName,
         Key: { id },
