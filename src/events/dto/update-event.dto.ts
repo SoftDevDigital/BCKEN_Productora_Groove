@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsDateString } from 'class-validator';
+import { Multer } from 'multer';
 
 export class UpdateEventDto {
   @IsString()
@@ -18,5 +19,5 @@ export class UpdateEventDto {
   location?: string;
 
   @IsOptional()
-  image?: any; // Imagen del evento (enviada como archivo multipart/form-data)
+  image?: Multer.File; // Imagen del evento (enviada como archivo)
 }

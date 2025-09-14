@@ -19,6 +19,7 @@ import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import type { Request } from 'express';
+import { Multer } from 'multer';
 
 @Controller('events')
 export class EventsController {
@@ -56,13 +57,15 @@ export class EventsController {
   @UseInterceptors(FileInterceptor('image'))
   async create(
     @Body() createEventDto: CreateEventDto,
-    @UploadedFile() image: any,
+    @UploadedFile() image: Multer.File,
     @Req() req: Request,
   ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      createEventDto.image = image; // Asignar la imagen al DTO
+      if (image) {
+        createEventDto.image = image; // Asignar la imagen al DTO si existe
+      }
       const event = await this.eventsService.create(createEventDto);
       return {
         statusCode: HttpStatus.CREATED,
@@ -74,7 +77,7 @@ export class EventsController {
         throw error;
       }
       throw new HttpException(
-        'Error al crear evento',
+        `Error al crear evento: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -126,7 +129,7 @@ export class EventsController {
   async update(
     @Param('id') id: string,
     @Body() updateEventDto: UpdateEventDto,
-    @UploadedFile() image: any,
+    @UploadedFile() image: Multer.File,
     @Req() req: Request,
   ) {
     try {
@@ -136,7 +139,9 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      updateEventDto.image = image; // Asignar la imagen al DTO
+      if (image) {
+        updateEventDto.image = image; // Asignar la imagen al DTO si existe
+      }
       const updatedEvent = await this.eventsService.update(id, updateEventDto);
       return {
         statusCode: HttpStatus.OK,
@@ -148,7 +153,7 @@ export class EventsController {
         throw error;
       }
       throw new HttpException(
-        'Error al actualizar evento',
+        `Error al actualizar evento: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

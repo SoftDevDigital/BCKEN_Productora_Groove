@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsOptional,
 } from 'class-validator';
+import { Multer } from 'multer';
 
 export class CreateEventDto {
   @IsString()
@@ -23,5 +24,5 @@ export class CreateEventDto {
   location: string;
 
   @IsOptional()
-  image?: any; // Imagen del evento (enviada como archivo multipart/form-data)
+  image?: Multer.File; // Imagen del evento (enviada como archivo)
 }

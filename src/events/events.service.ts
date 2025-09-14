@@ -31,8 +31,7 @@ export class EventsService {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
     });
-    this.bucketName =
-      this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
+    this.bucketName = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
   }
 
   async create(createEventDto: CreateEventDto) {
@@ -41,6 +40,12 @@ export class EventsService {
 
     // Subir imagen a S3 si se proporciona
     if (createEventDto.image) {
+      if (!createEventDto.image.buffer || !createEventDto.image.mimetype) {
+        throw new HttpException(
+          'Archivo de imagen inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const fileExtension = createEventDto.image.mimetype.split('/')[1];
       if (!['png', 'jpeg', 'jpg'].includes(fileExtension)) {
         throw new HttpException(
@@ -55,15 +60,23 @@ export class EventsService {
         );
       }
       const imageKey = `events/event-${eventId}-${uuidv4()}.${fileExtension}`;
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.bucketName,
-          Key: imageKey,
-          Body: createEventDto.image.buffer,
-          ContentType: createEventDto.image.mimetype,
-        }),
-      );
-      imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
+      try {
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: imageKey,
+            Body: createEventDto.image.buffer,
+            ContentType: createEventDto.image.mimetype,
+          }),
+        );
+        imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
+      } catch (error) {
+        console.error('Error subiendo imagen a S3:', error);
+        throw new HttpException(
+          `Error al subir la imagen a S3: ${error.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
     }
 
     const params = {
@@ -81,10 +94,11 @@ export class EventsService {
 
     try {
       await this.docClient.send(new PutCommand(params));
-      return { id: eventId, ...createEventDto, imageUrl };
+      return { id: eventId, ...createEventDto, image: undefined, imageUrl };
     } catch (error) {
+      console.error('Error creando evento en DynamoDB:', error);
       throw new HttpException(
-        'Error al crear evento',
+        'Error al crear evento en DynamoDB',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -128,6 +142,12 @@ export class EventsService {
 
     // Subir nueva imagen a S3 si se proporciona
     if (updateEventDto.image) {
+      if (!updateEventDto.image.buffer || !updateEventDto.image.mimetype) {
+        throw new HttpException(
+          'Archivo de imagen inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const fileExtension = updateEventDto.image.mimetype.split('/')[1];
       if (!['png', 'jpeg', 'jpg'].includes(fileExtension)) {
         throw new HttpException(
@@ -142,18 +162,26 @@ export class EventsService {
         );
       }
       const imageKey = `events/event-${id}-${uuidv4()}.${fileExtension}`;
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.bucketName,
-          Key: imageKey,
-          Body: updateEventDto.image.buffer,
-          ContentType: updateEventDto.image.mimetype,
-        }),
-      );
-      const imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
-      updateExpressionParts.push('#imageUrl = :imageUrl');
-      expressionAttributeNames['#imageUrl'] = 'imageUrl';
-      expressionAttributeValues[':imageUrl'] = imageUrl;
+      try {
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: imageKey,
+            Body: updateEventDto.image.buffer,
+            ContentType: updateEventDto.image.mimetype,
+          }),
+        );
+        const imageUrl = `https://${this.bucketName}.s3.amazonaws.com/${imageKey}`;
+        updateExpressionParts.push('#imageUrl = :imageUrl');
+        expressionAttributeNames['#imageUrl'] = 'imageUrl';
+        expressionAttributeValues[':imageUrl'] = imageUrl;
+      } catch (error) {
+        console.error('Error subiendo imagen a S3:', error);
+        throw new HttpException(
+          `Error al subir la imagen a S3: ${error.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
     }
 
     if (updateEventDto.name) {
@@ -197,10 +225,11 @@ export class EventsService {
 
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
-      return result.Attributes;
+      return { ...result.Attributes, image: undefined };
     } catch (error) {
+      console.error('Error actualizando evento en DynamoDB:', error);
       throw new HttpException(
-        'Error al actualizar evento',
+        'Error al actualizar evento en DynamoDB',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -216,9 +245,7 @@ export class EventsService {
     };
 
     try {
-      const batchResult = await this.docClient.send(
-        new QueryCommand(batchParams),
-      );
+      const batchResult = await this.docClient.send(new QueryCommand(batchParams));
       const batches = batchResult.Items || [];
 
       for (const batch of batches) {
@@ -237,9 +264,6 @@ export class EventsService {
 
       return { message: `Evento ${id} y sus tandas asociadas eliminados` };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
       throw new HttpException(
         'Error al eliminar evento y sus tandas',
         HttpStatus.INTERNAL_SERVER_ERROR,
