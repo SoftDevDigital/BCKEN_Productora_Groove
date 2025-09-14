@@ -24,5 +24,9 @@ export class CreateEventDto {
   location: string;
 
   @IsOptional()
+  @IsString()
+  description?: string; // Descripción del evento
+
+  @IsOptional()
   image?: Multer.File; // Imagen del evento (enviada como archivo)
 }

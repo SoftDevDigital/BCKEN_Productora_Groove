@@ -135,10 +135,6 @@ export class EventsController {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const event = await this.eventsService.findOne(id);
-      if (!event) {
-        throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
-      }
       if (image) {
         updateEventDto.image = image; // Asignar la imagen al DTO si existe
       }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -18,9 +19,14 @@ import { ReportsModule } from './reports/reports.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    MulterModule.register({
+      limits: {
+        fileSize: 5 * 1024 * 1024, // Límite de 5MB para archivos
+      },
+    }),
     AuthModule,
     EventsModule,
-    AWSSDKModule, // Provee DYNAMODB_CLIENT
+    AWSSDKModule,
     BatchesModule,
     SalesModule,
     PaymentsModule,

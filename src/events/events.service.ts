@@ -31,7 +31,8 @@ export class EventsService {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
     });
-    this.bucketName = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
+    this.bucketName =
+      this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
   }
 
   async create(createEventDto: CreateEventDto) {
@@ -87,6 +88,7 @@ export class EventsService {
         from: createEventDto.from,
         to: createEventDto.to,
         location: createEventDto.location,
+        description: createEventDto.description, // Añadir descripción
         imageUrl, // Guardar URL de la imagen (si existe)
         createdAt: new Date().toISOString(),
       },
@@ -204,6 +206,11 @@ export class EventsService {
       expressionAttributeNames['#location'] = 'location';
       expressionAttributeValues[':location'] = updateEventDto.location;
     }
+    if (updateEventDto.description !== undefined) {
+      updateExpressionParts.push('#description = :description');
+      expressionAttributeNames['#description'] = 'description';
+      expressionAttributeValues[':description'] = updateEventDto.description;
+    }
     if (updateExpressionParts.length === 0) {
       throw new HttpException(
         'No se proporcionaron datos para actualizar',
@@ -245,7 +252,9 @@ export class EventsService {
     };
 
     try {
-      const batchResult = await this.docClient.send(new QueryCommand(batchParams));
+      const batchResult = await this.docClient.send(
+        new QueryCommand(batchParams),
+      );
       const batches = batchResult.Items || [];
 
       for (const batch of batches) {
