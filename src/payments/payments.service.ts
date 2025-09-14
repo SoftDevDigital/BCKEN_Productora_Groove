@@ -47,13 +47,13 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `https://40da43ddbfec.ngrok-free.app/payments/success?saleId=${saleId}`,
-        failure: `https://40da43ddbfec.ngrok-free.app/payments/failure?saleId=${saleId}`,
-        pending: `https://40da43ddbfec.ngrok-free.app/payments/pending?saleId=${saleId}`,
+        success: `https://df2c6b52db81.ngrok-free.app/payments/success?saleId=${saleId}`,
+        failure: `https://df2c6b52db81.ngrok-free.app/payments/failure?saleId=${saleId}`,
+        pending: `https://df2c6b52db81.ngrok-free.app/payments/pending?saleId=${saleId}`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `https://40da43ddbfec.ngrok-free.app/sales/webhook`,
+      notification_url: `https://df2c6b52db81.ngrok-free.app/sales/webhook`,
     };
 
     try {

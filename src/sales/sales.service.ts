@@ -158,7 +158,10 @@ export class SalesService {
       console.log('Updating sale status:', { saleId, paymentStatus });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
-        console.log('Decrementing tickets:', { eventId: sale.Item.eventId, batchId: sale.Item.batchId });
+        console.log('Decrementing tickets:', {
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+        });
         await this.batchesService.decrementTickets(
           sale.Item.eventId,
           sale.Item.batchId,
@@ -173,7 +176,10 @@ export class SalesService {
           quantity: sale.Item.quantity,
         });
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
-        console.log('Updating user tickets:', { userId: sale.Item.userId, ticketIds });
+        console.log('Updating user tickets:', {
+          userId: sale.Item.userId,
+          ticketIds,
+        });
         await this.usersService.updateUserTickets(
           sale.Item.userId,
           ticketIds,
@@ -183,7 +189,10 @@ export class SalesService {
         const user = await this.usersService.getUserProfile(sale.Item.userId);
         console.log('Fetching event:', sale.Item.eventId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
-        console.log('Fetching batch:', { eventId: sale.Item.eventId, batchId: sale.Item.batchId });
+        console.log('Fetching batch:', {
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+        });
         const batch = await this.batchesService.findOne(
           sale.Item.eventId,
           sale.Item.batchId,
@@ -194,14 +203,20 @@ export class SalesService {
             const qrKey = ticket.qrS3Url.split('.amazonaws.com/')[1];
             const s3Response = await this.s3Client.send(
               new GetObjectCommand({
-                Bucket: this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2',
+                Bucket:
+                  this.configService.get<string>('S3_BUCKET') ||
+                  'ticket-qr-bucket-dev-v2',
                 Key: qrKey,
               }),
             );
             const body = await new Promise<Buffer>((resolve, reject) => {
               const chunks: Buffer[] = [];
-              (s3Response.Body as Readable).on('data', (chunk) => chunks.push(chunk));
-              (s3Response.Body as Readable).on('end', () => resolve(Buffer.concat(chunks)));
+              (s3Response.Body as Readable).on('data', (chunk) =>
+                chunks.push(chunk),
+              );
+              (s3Response.Body as Readable).on('end', () =>
+                resolve(Buffer.concat(chunks)),
+              );
               (s3Response.Body as Readable).on('error', reject);
             });
             return {
@@ -245,15 +260,17 @@ Equipo Groove Tickets
           'Content-Type: text/plain; charset=UTF-8',
           '',
           emailBody,
-          ...qrAttachments.map((attachment) => [
-            '--boundary',
-            `Content-Type: ${attachment.ContentType}`,
-            `Content-Disposition: attachment; filename="${attachment.Filename}"`,
-            `Content-Transfer-Encoding: base64`,
-            `Content-ID: <${attachment.ContentID}>`,
-            '',
-            attachment.Content.toString('base64'),
-          ].join('\n')),
+          ...qrAttachments.map((attachment) =>
+            [
+              '--boundary',
+              `Content-Type: ${attachment.ContentType}`,
+              `Content-Disposition: attachment; filename="${attachment.Filename}"`,
+              `Content-Transfer-Encoding: base64`,
+              `Content-ID: <${attachment.ContentID}>`,
+              '',
+              attachment.Content.toString('base64'),
+            ].join('\n'),
+          ),
           '--boundary--',
         ].join('\n');
         console.log('Sending email to:', user.email);
@@ -282,7 +299,10 @@ Equipo Groove Tickets
     const saleId = payment.external_reference;
 
     if (!saleId) {
-      throw new HttpException('No se encontró referencia de venta', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'No se encontró referencia de venta',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await this.confirmSale(saleId, status, paymentId);

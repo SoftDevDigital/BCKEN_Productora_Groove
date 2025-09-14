@@ -34,7 +34,10 @@ export class BatchesService {
         name: createBatchDto.name,
         totalTickets: createBatchDto.totalTickets,
         availableTickets: createBatchDto.totalTickets,
-        price: createBatchDto.price, // Nuevo campo
+        price: createBatchDto.price,
+        isVip: createBatchDto.isVip, // Nuevo campo
+        startTime: createBatchDto.startTime, // Horario de inicio
+        endTime: createBatchDto.endTime, // Horario de finalización
         createdAt: new Date().toISOString(),
       },
     };
@@ -111,6 +114,21 @@ export class BatchesService {
       updateExpressionParts.push('#price = :price');
       expressionAttributeNames['#price'] = 'price';
       expressionAttributeValues[':price'] = updateBatchDto.price;
+    }
+    if (updateBatchDto.isVip !== undefined) {
+      updateExpressionParts.push('#isVip = :isVip');
+      expressionAttributeNames['#isVip'] = 'isVip';
+      expressionAttributeValues[':isVip'] = updateBatchDto.isVip;
+    }
+    if (updateBatchDto.startTime !== undefined) {
+      updateExpressionParts.push('#startTime = :startTime');
+      expressionAttributeNames['#startTime'] = 'startTime';
+      expressionAttributeValues[':startTime'] = updateBatchDto.startTime;
+    }
+    if (updateBatchDto.endTime !== undefined) {
+      updateExpressionParts.push('#endTime = :endTime');
+      expressionAttributeNames['#endTime'] = 'endTime';
+      expressionAttributeValues[':endTime'] = updateBatchDto.endTime;
     }
 
     if (updateExpressionParts.length === 0) {

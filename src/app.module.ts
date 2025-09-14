@@ -15,12 +15,12 @@ import { ReportsModule } from './reports/reports.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Hacer ConfigModule disponible globalmente
-      envFilePath: '.env', // Opcional: usa un archivo .env para variables
+      isGlobal: true,
+      envFilePath: '.env',
     }),
     AuthModule,
     EventsModule,
-    AWSSDKModule,
+    AWSSDKModule, // Provee DYNAMODB_CLIENT
     BatchesModule,
     SalesModule,
     PaymentsModule,

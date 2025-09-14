@@ -36,8 +36,13 @@ export class TicketsService {
     batchId: string;
     quantity: number;
   }) {
-    const tickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
-    const bucket = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
+    const tickets: Array<{
+      ticketId: string;
+      saleId: string;
+      qrS3Url: string;
+    }> = [];
+    const bucket =
+      this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
     for (let i = 0; i < sale.quantity; i++) {
       const ticketId = nanoid(6);
       const qrData = `ticketId:${ticketId}`;

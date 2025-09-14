@@ -1,4 +1,12 @@
-import { IsString, IsInt, Min, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  Min,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  IsDateString,
+} from 'class-validator';
 
 export class UpdateBatchDto {
   @IsOptional()
@@ -14,4 +22,16 @@ export class UpdateBatchDto {
   @IsNumber()
   @Min(0)
   price?: number; // Precio en ARS (o moneda configurada)
+
+  @IsOptional()
+  @IsBoolean()
+  isVip?: boolean; // Indica si la tanda es VIP
+
+  @IsOptional()
+  @IsDateString()
+  startTime?: string; // Horario de inicio de la tanda (formato ISO)
+
+  @IsOptional()
+  @IsDateString()
+  endTime?: string; // Horario de finalización de la tanda (formato ISO)
 }
