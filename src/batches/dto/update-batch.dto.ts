@@ -16,7 +16,7 @@ export class UpdateBatchDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  totalTickets?: number;
+  totalTickets?: number; // Total de tickets en la tanda
 
   @IsOptional()
   @IsNumber()
