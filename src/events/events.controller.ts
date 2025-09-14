@@ -55,7 +55,11 @@ export class EventsController {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
       const event = await this.eventsService.create(createEventDto);
-      return event;
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: 'Evento creado exitosamente',
+        data: event,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -70,7 +74,12 @@ export class EventsController {
   @Get()
   async findAll() {
     try {
-      return await this.eventsService.findAll();
+      const events = await this.eventsService.findAll();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Eventos obtenidos exitosamente',
+        data: events,
+      };
     } catch (error) {
       throw new HttpException(
         'Error al obtener eventos',
@@ -86,7 +95,11 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return event;
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Evento obtenido exitosamente',
+        data: event,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -112,7 +125,12 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return await this.eventsService.update(id, updateEventDto);
+      const updatedEvent = await this.eventsService.update(id, updateEventDto);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Evento actualizado exitosamente',
+        data: updatedEvent,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -133,13 +151,17 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return await this.eventsService.delete(id);
+      const result = await this.eventsService.delete(id);
+      return {
+        statusCode: HttpStatus.OK,
+        message: result.message,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        'Error al eliminar evento',
+        'Error al eliminar evento y sus tandas',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
