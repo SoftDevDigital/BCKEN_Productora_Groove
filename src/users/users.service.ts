@@ -16,11 +16,18 @@ import {
 import { SalesService } from '../sales/sales.service';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
+import {
+  CognitoIdentityProviderClient,
+  AdminGetUserCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
+import { ConfigService } from '@nestjs/config';
+import { User } from './users/types';
 
 @Injectable()
 export class UsersService {
   private readonly tableName = 'Users-v2';
   private readonly docClient: DynamoDBDocumentClient;
+  private readonly cognitoClient: CognitoIdentityProviderClient;
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
@@ -28,8 +35,12 @@ export class UsersService {
     private readonly salesService: SalesService,
     private readonly eventsService: EventsService,
     private readonly batchesService: BatchesService,
+    private readonly configService: ConfigService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
+    this.cognitoClient = new CognitoIdentityProviderClient({
+      region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
+    });
   }
 
   async createOrUpdateUser(userId: string, role: string, email: string) {
@@ -126,13 +137,52 @@ export class UsersService {
     }
   }
 
-  async getAllUsers() {
+  async getAllUsers(): Promise<User[]> {
     const params = {
       TableName: this.tableName,
     };
     try {
       const result = await this.docClient.send(new ScanCommand(params));
-      return result.Items || [];
+      const users = result.Items || [];
+
+      // Obtener datos adicionales de Cognito para cada usuario
+      const enrichedUsers = await Promise.all(
+        users.map(async (user: any) => {
+          try {
+            const command = new AdminGetUserCommand({
+              UserPoolId: this.configService.get<string>(
+                'COGNITO_USER_POOL_ID',
+              ),
+              Username: user.id,
+            });
+            const cognitoUser = await this.cognitoClient.send(command);
+            const attributes =
+              cognitoUser.UserAttributes?.reduce(
+                (acc, attr) => ({ ...acc, [attr.Name as string]: attr.Value }),
+                {} as Record<string, string>,
+              ) || {};
+            return {
+              ...user,
+              given_name: attributes['given_name'] || 'N/A',
+              family_name: attributes['family_name'] || 'N/A',
+              email: attributes['email'] || user.email,
+            };
+          } catch (error) {
+            console.error(
+              `Error fetching Cognito data for user ${user.id}:`,
+              error,
+            );
+            return {
+              ...user,
+              given_name: 'N/A',
+              family_name: 'N/A',
+              email: user.email,
+            };
+          }
+        }),
+      );
+
+      return enrichedUsers as User[];
     } catch (error) {
       throw new HttpException(
         'Error al listar usuarios',
@@ -143,7 +193,6 @@ export class UsersService {
 
   async getUserPurchases(userId: string) {
     try {
-      // Obtener ventas del usuario
       const salesResult = await this.docClient.send(
         new ScanCommand({
           TableName: 'Sales-v2',
@@ -153,7 +202,6 @@ export class UsersService {
       );
       const sales = salesResult.Items || [];
 
-      // Obtener detalles de eventos, tandas y tickets
       const purchases = await Promise.all(
         sales.map(async (sale) => {
           const event = await this.eventsService.findOne(sale.eventId);
@@ -169,7 +217,6 @@ export class UsersService {
             }),
           );
           const tickets = ticketsResult.Items || [];
-
           return {
             saleId: sale.id,
             event: event
@@ -192,7 +239,6 @@ export class UsersService {
           };
         }),
       );
-
       return purchases;
     } catch (error) {
       throw new HttpException(

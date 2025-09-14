@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import type { Request } from 'express';
+import { User } from '../users/users/types';
 
 @Controller('admin/reports')
 export class ReportsController {
@@ -85,7 +86,9 @@ export class ReportsController {
   }
 
   @Get('users')
-  async getUsersReport(@Req() req: Request) {
+  async getUsersReport(
+    @Req() req: Request,
+  ): Promise<{ statusCode: number; message: string; data: User[] }> {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
