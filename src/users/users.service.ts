@@ -137,6 +137,27 @@ export class UsersService {
     }
   }
 
+  async getUserByEmailOrAlias(emailOrAlias: string): Promise<User | null> {
+    const params = {
+      TableName: this.tableName,
+      FilterExpression: 'email = :value OR alias = :value',
+      ExpressionAttributeValues: {
+        ':value': emailOrAlias,
+      },
+    };
+    try {
+      const result = await this.docClient.send(new ScanCommand(params));
+      return result.Items && result.Items.length > 0
+        ? (result.Items[0] as User)
+        : null;
+    } catch (error) {
+      throw new HttpException(
+        'Error al buscar usuario por email o alias',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   async getAllUsers(): Promise<User[]> {
     const params = {
       TableName: this.tableName,
@@ -144,8 +165,6 @@ export class UsersService {
     try {
       const result = await this.docClient.send(new ScanCommand(params));
       const users = result.Items || [];
-
-      // Obtener datos adicionales de Cognito para cada usuario
       const enrichedUsers = await Promise.all(
         users.map(async (user: any) => {
           try {
@@ -181,7 +200,6 @@ export class UsersService {
           }
         }),
       );
-
       return enrichedUsers as User[];
     } catch (error) {
       throw new HttpException(
@@ -201,7 +219,6 @@ export class UsersService {
         }),
       );
       const sales = salesResult.Items || [];
-
       const purchases = await Promise.all(
         sales.map(async (sale) => {
           const event = await this.eventsService.findOne(sale.eventId);

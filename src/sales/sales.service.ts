@@ -53,11 +53,37 @@ export class SalesService {
     resellerEmail?: string,
   ) {
     const saleId = uuidv4();
-    const { eventId, batchId, quantity, type } = createSaleDto;
+    const {
+      eventId,
+      batchId,
+      quantity,
+      type,
+      buyerEmailOrAlias,
+      resellerId: providedResellerId,
+    } = createSaleDto;
+
+    let finalUserId = userId;
+    let finalEmail = email;
+
+    // Para ventas reseller, validar buyerEmailOrAlias si se proporciona
+    if (type === 'reseller' && buyerEmailOrAlias) {
+      const user =
+        await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
+      if (!user) {
+        throw new HttpException(
+          'El email o alias del comprador no está registrado',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      finalUserId = user.id;
+      finalEmail = user.email;
+    }
+
     const event = await this.eventsService.findOne(eventId);
     if (!event) {
       throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
     }
+
     const batch = await this.batchesService.findOne(eventId, batchId);
     if (!batch || batch.availableTickets < quantity) {
       throw new HttpException(
@@ -65,25 +91,30 @@ export class SalesService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
     const basePrice = batch.price || 10;
     let total = quantity * basePrice;
     let commission = 0;
+
     if (type === 'reseller') {
-      if (!resellerId || !resellerEmail) {
+      const finalResellerId = resellerId || providedResellerId;
+      if (!finalResellerId) {
         throw new HttpException(
-          'Se requiere resellerId y resellerEmail para ventas por revendedor',
+          'Se requiere resellerId para ventas por revendedor',
           HttpStatus.BAD_REQUEST,
         );
       }
       commission = total * 0.1;
       total += commission;
     }
+
     const params: PutCommandInput = {
       TableName: this.tableName,
       Item: {
         id: saleId,
-        userId,
-        resellerId: resellerId || null,
+        userId: finalUserId,
+        resellerId:
+          type === 'reseller' ? resellerId || providedResellerId : null,
         eventId,
         batchId,
         quantity,
@@ -95,14 +126,19 @@ export class SalesService {
         createdAt: new Date().toISOString(),
       },
     };
+
     try {
       await this.docClient.send(new PutCommand(params));
-      await this.usersService.createOrUpdateUser(userId, 'User', email);
-      if (resellerId && resellerEmail) {
+      await this.usersService.createOrUpdateUser(
+        finalUserId,
+        'User',
+        finalEmail,
+      );
+      if (type === 'reseller' && (resellerId || providedResellerId)) {
         await this.usersService.createOrUpdateUser(
-          resellerId,
+          resellerId || providedResellerId!,
           'Reseller',
-          resellerEmail,
+          resellerEmail || finalEmail,
         );
       }
       return {
@@ -137,6 +173,7 @@ export class SalesService {
     if (sale.Item.status !== 'pending') {
       throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
     }
+
     const updateParams: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { id: saleId },
@@ -154,6 +191,7 @@ export class SalesService {
       },
       ReturnValues: 'ALL_NEW' as const,
     };
+
     try {
       console.log('Updating sale status:', { saleId, paymentStatus });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
@@ -230,9 +268,7 @@ export class SalesService {
         console.log('Preparing email body');
         const emailBody = `
 Hola ${user.alias || 'Usuario'},
-
 Tu compra ha sido confirmada exitosamente.
-
 **Comprobante de Pago**
 - Venta ID: ${saleId}
 - Evento: ${event?.name || 'Desconocido'}
@@ -242,10 +278,8 @@ Tu compra ha sido confirmada exitosamente.
 - Comisión: $${sale.Item.commission}
 - Importe total abonado: $${sale.Item.total}
 - Tickets: ${ticketIds.join(', ')}
-
 **Códigos QR Únicos**
 Los códigos QR de tus tickets están adjuntos en este correo.
-
 ¡Gracias por tu compra!
 Equipo Groove Tickets
         `;
@@ -297,16 +331,13 @@ Equipo Groove Tickets
     const payment = await this.paymentsService.getPaymentStatus(paymentId);
     const status = payment.status;
     const saleId = payment.external_reference;
-
     if (!saleId) {
       throw new HttpException(
         'No se encontró referencia de venta',
         HttpStatus.BAD_REQUEST,
       );
     }
-
     await this.confirmSale(saleId, status, paymentId);
-
     return { status: 'processed', saleId, paymentStatus: status };
   }
 }
