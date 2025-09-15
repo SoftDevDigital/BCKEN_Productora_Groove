@@ -8,11 +8,13 @@ import {
   UpdateCommand,
   DeleteCommand,
   QueryCommand,
+  ScanCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { SearchEventDto } from './dto/search.dto';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -38,7 +40,6 @@ export class EventsService {
   async create(createEventDto: CreateEventDto) {
     const eventId = uuidv4();
     let imageUrl: string | undefined;
-
     // Subir imagen a S3 si se proporciona
     if (createEventDto.image) {
       if (!createEventDto.image.buffer || !createEventDto.image.mimetype) {
@@ -79,21 +80,19 @@ export class EventsService {
         );
       }
     }
-
     const params = {
       TableName: this.tableName,
       Item: {
         id: eventId,
-        name: createEventDto.name,
+        name: createEventDto.name.trim(), // Normalizar al crear
         from: createEventDto.from,
         to: createEventDto.to,
-        location: createEventDto.location,
-        description: createEventDto.description, // Añadir descripción
-        imageUrl, // Guardar URL de la imagen (si existe)
+        location: createEventDto.location ? createEventDto.location.trim() : undefined,
+        description: createEventDto.description ? createEventDto.description.trim() : undefined,
+        imageUrl,
         createdAt: new Date().toISOString(),
       },
     };
-
     try {
       await this.docClient.send(new PutCommand(params));
       return { id: eventId, ...createEventDto, image: undefined, imageUrl };
@@ -121,6 +120,88 @@ export class EventsService {
     }
   }
 
+  async search(query: SearchEventDto) {
+    const params: ScanCommandInput = {
+      TableName: this.tableName,
+      FilterExpression: '',
+      ExpressionAttributeNames: {},
+      ExpressionAttributeValues: {},
+    };
+
+    const filterExpressions: string[] = [];
+
+    // Normalizar entradas: eliminar espacios múltiples, acentos y convertir a minúsculas
+    const normalize = (str: string | undefined) => {
+      if (!str) return undefined;
+      return str
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ') // Normalizar espacios
+        .normalize('NFD') // Descomponer acentos
+        .replace(/[\u0300-\u036f]/g, ''); // Eliminar marcas de acentos
+    };
+
+    const normalizedQ = normalize(query.q);
+    const normalizedName = normalize(query.name);
+    const normalizedLocation = normalize(query.location);
+    const normalizedDescription = normalize(query.description);
+    const from = query.from;
+    const to = query.to;
+
+    if (normalizedQ) {
+      filterExpressions.push('(contains(#name, :q) OR contains(#location, :q) OR contains(#description, :q))');
+      params.ExpressionAttributeNames!['#name'] = 'name';
+      params.ExpressionAttributeNames!['#location'] = 'location';
+      params.ExpressionAttributeNames!['#description'] = 'description';
+      params.ExpressionAttributeValues![':q'] = normalizedQ;
+    }
+
+    if (normalizedName) {
+      filterExpressions.push('contains(#name, :name)');
+      params.ExpressionAttributeNames!['#name'] = 'name';
+      params.ExpressionAttributeValues![':name'] = normalizedName;
+    }
+
+    if (normalizedLocation) {
+      filterExpressions.push('contains(#location, :location)');
+      params.ExpressionAttributeNames!['#location'] = 'location';
+      params.ExpressionAttributeValues![':location'] = normalizedLocation;
+    }
+
+    if (normalizedDescription) {
+      filterExpressions.push('contains(#description, :description)');
+      params.ExpressionAttributeNames!['#description'] = 'description';
+      params.ExpressionAttributeValues![':description'] = normalizedDescription;
+    }
+
+    if (from) {
+      filterExpressions.push('#from >= :from');
+      params.ExpressionAttributeNames!['#from'] = 'from';
+      params.ExpressionAttributeValues![':from'] = from;
+    }
+
+    if (to) {
+      filterExpressions.push('#to <= :to');
+      params.ExpressionAttributeNames!['#to'] = 'to';
+      params.ExpressionAttributeValues![':to'] = to;
+    }
+
+    if (filterExpressions.length > 0) {
+      params.FilterExpression = filterExpressions.join(' AND ');
+    }
+
+    try {
+      const result = await this.docClient.send(new ScanCommand(params));
+      return result.Items || [];
+    } catch (error) {
+      console.error('Error al buscar eventos:', error);
+      throw new HttpException(
+        'Error al buscar eventos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   async findOne(id: string) {
     const params = {
       TableName: this.tableName,
@@ -141,7 +222,6 @@ export class EventsService {
     const updateExpressionParts: string[] = [];
     const expressionAttributeNames: { [key: string]: string } = {};
     const expressionAttributeValues: { [key: string]: any } = {};
-
     // Subir nueva imagen a S3 si se proporciona
     if (updateEventDto.image) {
       if (!updateEventDto.image.buffer || !updateEventDto.image.mimetype) {
@@ -185,11 +265,10 @@ export class EventsService {
         );
       }
     }
-
     if (updateEventDto.name) {
       updateExpressionParts.push('#name = :name');
       expressionAttributeNames['#name'] = 'name';
-      expressionAttributeValues[':name'] = updateEventDto.name;
+      expressionAttributeValues[':name'] = updateEventDto.name.trim();
     }
     if (updateEventDto.from) {
       updateExpressionParts.push('#from = :from');
@@ -204,12 +283,12 @@ export class EventsService {
     if (updateEventDto.location) {
       updateExpressionParts.push('#location = :location');
       expressionAttributeNames['#location'] = 'location';
-      expressionAttributeValues[':location'] = updateEventDto.location;
+      expressionAttributeValues[':location'] = updateEventDto.location.trim();
     }
     if (updateEventDto.description !== undefined) {
       updateExpressionParts.push('#description = :description');
       expressionAttributeNames['#description'] = 'description';
-      expressionAttributeValues[':description'] = updateEventDto.description;
+      expressionAttributeValues[':description'] = updateEventDto.description ? updateEventDto.description.trim() : undefined;
     }
     if (updateExpressionParts.length === 0) {
       throw new HttpException(
@@ -220,7 +299,6 @@ export class EventsService {
     updateExpressionParts.push('#updatedAt = :updatedAt');
     expressionAttributeNames['#updatedAt'] = 'updatedAt';
     expressionAttributeValues[':updatedAt'] = new Date().toISOString();
-
     const params = {
       TableName: this.tableName,
       Key: { id },
@@ -229,7 +307,6 @@ export class EventsService {
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW' as const,
     };
-
     try {
       const result = await this.docClient.send(new UpdateCommand(params));
       return { ...result.Attributes, image: undefined };
@@ -250,13 +327,11 @@ export class EventsService {
         ':eventId': id,
       },
     };
-
     try {
       const batchResult = await this.docClient.send(
         new QueryCommand(batchParams),
       );
       const batches = batchResult.Items || [];
-
       for (const batch of batches) {
         const deleteBatchParams = {
           TableName: this.batchesTableName,
@@ -264,17 +339,30 @@ export class EventsService {
         };
         await this.docClient.send(new DeleteCommand(deleteBatchParams));
       }
-
       const eventParams = {
         TableName: this.tableName,
         Key: { id },
       };
       await this.docClient.send(new DeleteCommand(eventParams));
-
       return { message: `Evento ${id} y sus tandas asociadas eliminados` };
     } catch (error) {
       throw new HttpException(
         'Error al eliminar evento y sus tandas',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async debug() {
+    const params = {
+      TableName: this.tableName,
+    };
+    try {
+      const result = await this.docClient.send(new ScanCommand(params));
+      return result.Items || [];
+    } catch (error) {
+      throw new HttpException(
+        'Error al obtener datos crudos de eventos',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

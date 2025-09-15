@@ -13,11 +13,13 @@ import {
   ValidationPipe,
   UseInterceptors,
   UploadedFile,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { SearchEventDto } from './dto/search.dto';
 import type { Request } from 'express';
 import { Multer } from 'multer';
 
@@ -64,7 +66,7 @@ export class EventsController {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
       if (image) {
-        createEventDto.image = image; // Asignar la imagen al DTO si existe
+        createEventDto.image = image;
       }
       const event = await this.eventsService.create(createEventDto);
       return {
@@ -95,6 +97,41 @@ export class EventsController {
     } catch (error) {
       throw new HttpException(
         'Error al obtener eventos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('search')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async search(@Query() query: SearchEventDto) {
+    try {
+      const events = await this.eventsService.search(query);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Búsqueda de eventos realizada exitosamente',
+        data: events,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al buscar eventos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('debug')
+  async debug() {
+    try {
+      const events = await this.eventsService.debug();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Datos crudos de eventos obtenidos',
+        data: events,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al obtener datos crudos de eventos',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -136,7 +173,7 @@ export class EventsController {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
       if (image) {
-        updateEventDto.image = image; // Asignar la imagen al DTO si existe
+        updateEventDto.image = image;
       }
       const updatedEvent = await this.eventsService.update(id, updateEventDto);
       return {
