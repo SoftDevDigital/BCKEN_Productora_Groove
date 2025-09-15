@@ -111,8 +111,6 @@ export class SalesService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      commission = total * 0.1;
-      total += commission;
     }
 
     const params: PutCommandInput = {
