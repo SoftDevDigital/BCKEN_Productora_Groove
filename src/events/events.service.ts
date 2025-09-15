@@ -87,8 +87,12 @@ export class EventsService {
         name: createEventDto.name.trim(), // Normalizar al crear
         from: createEventDto.from,
         to: createEventDto.to,
-        location: createEventDto.location ? createEventDto.location.trim() : undefined,
-        description: createEventDto.description ? createEventDto.description.trim() : undefined,
+        location: createEventDto.location
+          ? createEventDto.location.trim()
+          : undefined,
+        description: createEventDto.description
+          ? createEventDto.description.trim()
+          : undefined,
         imageUrl,
         createdAt: new Date().toISOString(),
       },
@@ -149,7 +153,9 @@ export class EventsService {
     const to = query.to;
 
     if (normalizedQ) {
-      filterExpressions.push('(contains(#name, :q) OR contains(#location, :q) OR contains(#description, :q))');
+      filterExpressions.push(
+        '(contains(#name, :q) OR contains(#location, :q) OR contains(#description, :q))',
+      );
       params.ExpressionAttributeNames!['#name'] = 'name';
       params.ExpressionAttributeNames!['#location'] = 'location';
       params.ExpressionAttributeNames!['#description'] = 'description';
@@ -288,7 +294,9 @@ export class EventsService {
     if (updateEventDto.description !== undefined) {
       updateExpressionParts.push('#description = :description');
       expressionAttributeNames['#description'] = 'description';
-      expressionAttributeValues[':description'] = updateEventDto.description ? updateEventDto.description.trim() : undefined;
+      expressionAttributeValues[':description'] = updateEventDto.description
+        ? updateEventDto.description.trim()
+        : undefined;
     }
     if (updateExpressionParts.length === 0) {
       throw new HttpException(

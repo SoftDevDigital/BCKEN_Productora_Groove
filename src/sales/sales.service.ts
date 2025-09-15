@@ -26,6 +26,7 @@ export class SalesService {
   private readonly docClient: DynamoDBDocumentClient;
   private readonly sesClient: SESClient;
   private readonly s3Client: S3Client;
+  private readonly DIRECT_SALE_FEE = 2000; // Costo fijo por ticket en compras directas
 
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
@@ -96,6 +97,12 @@ export class SalesService {
     let total = quantity * basePrice;
     let commission = 0;
 
+    // Agregar costo fijo de 2000 por ticket en compras directas
+    if (type === 'direct') {
+      total += quantity * this.DIRECT_SALE_FEE;
+    }
+
+    // Calcular comisión para ventas por revendedor
     if (type === 'reseller') {
       const finalResellerId = resellerId || providedResellerId;
       if (!finalResellerId) {
