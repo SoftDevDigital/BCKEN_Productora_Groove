@@ -1,0 +1,28 @@
+service: ticket-backend
+frameworkVersion: '3'
+
+plugins:
+  - serverless-domain-manager
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev  # Añade esto para definir un stage por defecto
+
+functions:
+  app:
+    handler: dist/main.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: any
+
+custom:
+  customDomain:
+    domainName: fest-go.com
+    basePath: ''
+    stage: ${self:provider.stage}  # Ahora esto resolverá a 'dev'
+    certificateArn: 'arn:aws:acm:us-east-1:663134816305:certificate/fd83dd2e-fd69-43e5-ac0d-b7049c109a4d'  # Reemplaza con el ARN real
+    createRoute53Record: true
+    endpointType: 'regional'

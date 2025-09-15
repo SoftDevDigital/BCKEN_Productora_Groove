@@ -58,13 +58,23 @@ export class BatchesController {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
+      // Validar que startTime sea anterior a endTime
+      if (new Date(dto.startTime) >= new Date(dto.endTime)) {
+        throw new HttpException(
+          'El horario de inicio debe ser anterior al horario de finalización',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const result = await this.batchesService.create(eventId, dto);
       return {
         statusCode: HttpStatus.CREATED,
-        message: 'Tanda creada exitosamente',
+        message: `Tanda ${dto.isVip ? 'VIP' : 'general'} creada exitosamente`,
         data: result,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error al crear tanda',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -100,6 +110,17 @@ export class BatchesController {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
+      // Validar que startTime sea anterior a endTime si ambos se proporcionan
+      if (
+        dto.startTime &&
+        dto.endTime &&
+        new Date(dto.startTime) >= new Date(dto.endTime)
+      ) {
+        throw new HttpException(
+          'El horario de inicio debe ser anterior al horario de finalización',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const updatedBatch = await this.batchesService.update(
         eventId,
         batchId,
@@ -110,7 +131,7 @@ export class BatchesController {
       }
       return {
         statusCode: HttpStatus.OK,
-        message: 'Tanda actualizada exitosamente',
+        message: `Tanda ${dto.isVip !== undefined ? (dto.isVip ? 'VIP' : 'general') : ''} actualizada exitosamente`,
         data: updatedBatch,
       };
     } catch (error) {

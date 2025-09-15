@@ -8,6 +8,17 @@ import {
 import { UsersService } from './users.service';
 import type { Request } from 'express';
 
+interface User {
+  id: string;
+  email: string;
+  role: string;
+  purchasedTickets: string[];
+  soldTickets?: string[];
+  createdAt: string;
+  given_name: string;
+  family_name: string;
+}
+
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -98,7 +109,16 @@ export class UsersController {
       return {
         statusCode: HttpStatus.OK,
         message: 'Usuarios obtenidos exitosamente',
-        data: users,
+        data: users.map((user: User) => ({
+          id: user.id,
+          email: user.email,
+          given_name: user.given_name,
+          family_name: user.family_name,
+          role: user.role,
+          purchasedTickets: user.purchasedTickets,
+          soldTickets: user.soldTickets,
+          createdAt: user.createdAt,
+        })),
       };
     } catch (error) {
       if (error instanceof HttpException) {

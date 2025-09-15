@@ -17,4 +17,8 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   resellerId?: string; // Obligatorio si type es 'reseller'
+
+  @IsOptional()
+  @IsString()
+  buyerEmailOrAlias?: string; // Opcional, para email o alias del comprador en ventas reseller
 }

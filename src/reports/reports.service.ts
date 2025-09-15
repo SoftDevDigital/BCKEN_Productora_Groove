@@ -10,6 +10,7 @@ import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
+import { User } from '../users/users/types';
 
 @Injectable()
 export class ReportsService {
@@ -33,7 +34,6 @@ export class ReportsService {
         new ScanCommand({ TableName: this.salesTable }),
       );
       const sales = salesResult.Items || [];
-
       const totalSales = sales.length;
       const totalRevenue = sales.reduce(
         (sum, sale) => sum + (sale.total || 0),
@@ -47,7 +47,6 @@ export class ReportsService {
         (sum, sale) => sum + (sale.quantity || 0),
         0,
       );
-
       const salesByEvent = {};
       for (const sale of sales) {
         const eventId = sale.eventId;
@@ -66,7 +65,6 @@ export class ReportsService {
         salesByEvent[eventId].totalSales += 1;
         salesByEvent[eventId].totalTickets += sale.quantity;
         salesByEvent[eventId].totalRevenue += sale.total;
-
         const batchId = sale.batchId;
         if (!salesByEvent[eventId].batches[batchId]) {
           const batch = await this.batchesService.findOne(eventId, batchId);
@@ -79,7 +77,6 @@ export class ReportsService {
         salesByEvent[eventId].batches[batchId].ticketsSold += sale.quantity;
         salesByEvent[eventId].batches[batchId].revenue += sale.total;
       }
-
       return {
         totalSales,
         totalRevenue,
@@ -106,7 +103,6 @@ export class ReportsService {
       if (!sale.Item) {
         throw new HttpException('Venta no encontrada', HttpStatus.NOT_FOUND);
       }
-
       const tickets = await this.docClient.send(
         new ScanCommand({
           TableName: 'Tickets-v2',
@@ -114,7 +110,6 @@ export class ReportsService {
           ExpressionAttributeValues: { ':saleId': saleId },
         }),
       );
-
       const user = await this.usersService.getUserProfile(sale.Item.userId);
       const reseller = sale.Item.resellerId
         ? await this.usersService.getUserProfile(sale.Item.resellerId)
@@ -124,14 +119,12 @@ export class ReportsService {
         sale.Item.eventId,
         sale.Item.batchId,
       );
-
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
       if (!batch) {
         throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
       }
-
       return {
         sale: sale.Item,
         tickets: tickets.Items || [],
@@ -166,7 +159,7 @@ export class ReportsService {
     }
   }
 
-  async getUsersReport() {
+  async getUsersReport(): Promise<User[]> {
     try {
       const users = await this.usersService.getAllUsers();
       return users;

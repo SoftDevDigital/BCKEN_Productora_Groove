@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsDateString,
+  IsOptional,
+} from 'class-validator';
+import { Multer } from 'multer';
 
 export class CreateEventDto {
   @IsString()
@@ -16,4 +22,11 @@ export class CreateEventDto {
   @IsString()
   @IsNotEmpty()
   location: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string; // Descripción del evento
+
+  @IsOptional()
+  image?: Multer.File; // Imagen del evento (enviada como archivo)
 }
