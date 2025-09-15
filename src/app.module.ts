@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -11,12 +12,18 @@ import { PaymentsModule } from './payments/payments.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { UsersModule } from './users/users.module';
 import { ReportsModule } from './reports/reports.module';
+import { EmailService } from './email/email.service';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Hacer ConfigModule disponible globalmente
-      envFilePath: '.env', // Opcional: usa un archivo .env para variables
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    MulterModule.register({
+      limits: {
+        fileSize: 5 * 1024 * 1024, 
+      },
     }),
     AuthModule,
     EventsModule,
@@ -29,6 +36,7 @@ import { ReportsModule } from './reports/reports.module';
     ReportsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, EmailService],
+  exports: [EmailService],
 })
 export class AppModule {}

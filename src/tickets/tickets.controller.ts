@@ -5,6 +5,8 @@ import {
   Req,
   HttpException,
   HttpStatus,
+  Post,
+  Body,
 } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import type { Request } from 'express';
@@ -60,6 +62,63 @@ export class TicketsController {
       }
       throw new HttpException(
         'Error al validar ticket',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':ticketId/qr')
+  async getTicketQr(@Param('ticketId') ticketId: string, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const ticket = await this.ticketsService.validateTicket(ticketId);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'QR del ticket obtenido',
+        data: { qrS3Url: ticket.qrS3Url },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al obtener QR del ticket',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('admin/scan')
+  async scanTickets(
+    @Body() body: { ticketIds: string[] },
+    @Req() req: Request,
+  ) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      if (
+        !body.ticketIds ||
+        !Array.isArray(body.ticketIds) ||
+        body.ticketIds.length === 0
+      ) {
+        throw new HttpException(
+          'Se requiere una lista de ticketIds',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const results = await this.ticketsService.scanTickets(body.ticketIds);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Tickets escaneados',
+        data: results,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al escanear tickets',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

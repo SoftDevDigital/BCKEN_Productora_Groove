@@ -34,7 +34,10 @@ export class BatchesService {
         name: createBatchDto.name,
         totalTickets: createBatchDto.totalTickets,
         availableTickets: createBatchDto.totalTickets,
-        price: createBatchDto.price, // Nuevo campo
+        price: createBatchDto.price,
+        isVip: createBatchDto.isVip,
+        startTime: createBatchDto.startTime,
+        endTime: createBatchDto.endTime,
         createdAt: new Date().toISOString(),
       },
     };
@@ -93,24 +96,55 @@ export class BatchesService {
     const expressionAttributeNames: { [key: string]: string } = {};
     const expressionAttributeValues: { [key: string]: any } = {};
 
-    if (updateBatchDto.name !== undefined) {
-      updateExpressionParts.push('#name = :name');
-      expressionAttributeNames['#name'] = 'name';
-      expressionAttributeValues[':name'] = updateBatchDto.name;
+    // Obtener la tanda actual para verificar la cantidad de tickets vendidos
+    const currentBatch = await this.findOne(eventId, batchId);
+    if (!currentBatch) {
+      throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
     }
+    const ticketsSold =
+      currentBatch.totalTickets - currentBatch.availableTickets;
+
+    // Validar totalTickets si se proporciona
     if (updateBatchDto.totalTickets !== undefined) {
+      if (updateBatchDto.totalTickets < ticketsSold) {
+        throw new HttpException(
+          `No se puede reducir el total de tickets por debajo de los tickets vendidos (${ticketsSold})`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       updateExpressionParts.push('#totalTickets = :totalTickets');
       updateExpressionParts.push('#availableTickets = :availableTickets');
       expressionAttributeNames['#totalTickets'] = 'totalTickets';
       expressionAttributeNames['#availableTickets'] = 'availableTickets';
       expressionAttributeValues[':totalTickets'] = updateBatchDto.totalTickets;
       expressionAttributeValues[':availableTickets'] =
-        updateBatchDto.totalTickets;
+        updateBatchDto.totalTickets - ticketsSold;
+    }
+
+    if (updateBatchDto.name !== undefined) {
+      updateExpressionParts.push('#name = :name');
+      expressionAttributeNames['#name'] = 'name';
+      expressionAttributeValues[':name'] = updateBatchDto.name;
     }
     if (updateBatchDto.price !== undefined) {
       updateExpressionParts.push('#price = :price');
       expressionAttributeNames['#price'] = 'price';
       expressionAttributeValues[':price'] = updateBatchDto.price;
+    }
+    if (updateBatchDto.isVip !== undefined) {
+      updateExpressionParts.push('#isVip = :isVip');
+      expressionAttributeNames['#isVip'] = 'isVip';
+      expressionAttributeValues[':isVip'] = updateBatchDto.isVip;
+    }
+    if (updateBatchDto.startTime !== undefined) {
+      updateExpressionParts.push('#startTime = :startTime');
+      expressionAttributeNames['#startTime'] = 'startTime';
+      expressionAttributeValues[':startTime'] = updateBatchDto.startTime;
+    }
+    if (updateBatchDto.endTime !== undefined) {
+      updateExpressionParts.push('#endTime = :endTime');
+      expressionAttributeNames['#endTime'] = 'endTime';
+      expressionAttributeValues[':endTime'] = updateBatchDto.endTime;
     }
 
     if (updateExpressionParts.length === 0) {

@@ -11,11 +11,17 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  UseInterceptors,
+  UploadedFile,
+  Query,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { SearchEventDto } from './dto/search.dto';
 import type { Request } from 'express';
+import { Multer } from 'multer';
 
 @Controller('events')
 export class EventsController {
@@ -50,18 +56,30 @@ export class EventsController {
 
   @Post()
   @UsePipes(new ValidationPipe({ transform: true }))
-  async create(@Body() createEventDto: CreateEventDto, @Req() req: Request) {
+  @UseInterceptors(FileInterceptor('image'))
+  async create(
+    @Body() createEventDto: CreateEventDto,
+    @UploadedFile() image: Multer.File,
+    @Req() req: Request,
+  ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
+      if (image) {
+        createEventDto.image = image;
+      }
       const event = await this.eventsService.create(createEventDto);
-      return event;
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: 'Evento creado exitosamente',
+        data: event,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        'Error al crear evento',
+        `Error al crear evento: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -70,10 +88,50 @@ export class EventsController {
   @Get()
   async findAll() {
     try {
-      return await this.eventsService.findAll();
+      const events = await this.eventsService.findAll();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Eventos obtenidos exitosamente',
+        data: events,
+      };
     } catch (error) {
       throw new HttpException(
         'Error al obtener eventos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('search')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async search(@Query() query: SearchEventDto) {
+    try {
+      const events = await this.eventsService.search(query);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Búsqueda de eventos realizada exitosamente',
+        data: events,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al buscar eventos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('debug')
+  async debug() {
+    try {
+      const events = await this.eventsService.debug();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Datos crudos de eventos obtenidos',
+        data: events,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al obtener datos crudos de eventos',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -86,7 +144,11 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return event;
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Evento obtenido exitosamente',
+        data: event,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -100,25 +162,31 @@ export class EventsController {
 
   @Put(':id')
   @UsePipes(new ValidationPipe({ transform: true }))
+  @UseInterceptors(FileInterceptor('image'))
   async update(
     @Param('id') id: string,
     @Body() updateEventDto: UpdateEventDto,
+    @UploadedFile() image: Multer.File,
     @Req() req: Request,
   ) {
     try {
       const claims = this.getClaims(req);
       this.ensureAdmin(claims);
-      const event = await this.eventsService.findOne(id);
-      if (!event) {
-        throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
+      if (image) {
+        updateEventDto.image = image;
       }
-      return await this.eventsService.update(id, updateEventDto);
+      const updatedEvent = await this.eventsService.update(id, updateEventDto);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Evento actualizado exitosamente',
+        data: updatedEvent,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        'Error al actualizar evento',
+        `Error al actualizar evento: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -133,13 +201,17 @@ export class EventsController {
       if (!event) {
         throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
       }
-      return await this.eventsService.delete(id);
+      const result = await this.eventsService.delete(id);
+      return {
+        statusCode: HttpStatus.OK,
+        message: result.message,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        'Error al eliminar evento',
+        'Error al eliminar evento y sus tandas',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
