@@ -7,6 +7,8 @@ import { AWSSDKModule } from '../aws-sdk/aws-sdk.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { TicketsModule } from '../tickets/tickets.module';
 import { UsersModule } from '../users/users.module';
+import { EmailService } from '../email/email.service';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -16,9 +18,10 @@ import { UsersModule } from '../users/users.module';
     PaymentsModule,
     TicketsModule,
     forwardRef(() => UsersModule),
+    ConfigModule.forRoot(),
   ],
   controllers: [SalesController],
-  providers: [SalesService],
+  providers: [SalesService, EmailService],
   exports: [SalesService],
 })
 export class SalesModule {}

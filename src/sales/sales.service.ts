@@ -8,7 +8,6 @@ import {
   PutCommandInput,
   UpdateCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -18,13 +17,13 @@ import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from '../payments/payments.service';
+import { EmailService } from '../email/email.service';
 import { Readable } from 'stream';
 
 @Injectable()
 export class SalesService {
   private readonly tableName = 'Sales-v2';
   private readonly docClient: DynamoDBDocumentClient;
-  private readonly sesClient: SESClient;
   private readonly s3Client: S3Client;
   private readonly DIRECT_SALE_FEE = 2000; // Costo fijo por ticket en compras directas
 
@@ -36,11 +35,9 @@ export class SalesService {
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
     private readonly paymentsService: PaymentsService,
+    private readonly emailService: EmailService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
-    this.sesClient = new SESClient({
-      region: this.configService.get<string>('AWS_REGION'),
-    });
     this.s3Client = new S3Client({
       region: this.configService.get<string>('AWS_REGION'),
     });
@@ -62,10 +59,8 @@ export class SalesService {
       buyerEmailOrAlias,
       resellerId: providedResellerId,
     } = createSaleDto;
-
     let finalUserId = userId;
     let finalEmail = email;
-
     // Para ventas reseller, validar buyerEmailOrAlias si se proporciona
     if (type === 'reseller' && buyerEmailOrAlias) {
       const user =
@@ -79,12 +74,10 @@ export class SalesService {
       finalUserId = user.id;
       finalEmail = user.email;
     }
-
     const event = await this.eventsService.findOne(eventId);
     if (!event) {
       throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
     }
-
     const batch = await this.batchesService.findOne(eventId, batchId);
     if (!batch || batch.availableTickets < quantity) {
       throw new HttpException(
@@ -92,16 +85,13 @@ export class SalesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-
     const basePrice = batch.price || 10;
     let total = quantity * basePrice;
     let commission = 0;
-
     // Agregar costo fijo de 2000 por ticket en compras directas
     if (type === 'direct') {
       total += quantity * this.DIRECT_SALE_FEE;
     }
-
     // Calcular comisión para ventas por revendedor
     if (type === 'reseller') {
       const finalResellerId = resellerId || providedResellerId;
@@ -112,7 +102,6 @@ export class SalesService {
         );
       }
     }
-
     const params: PutCommandInput = {
       TableName: this.tableName,
       Item: {
@@ -131,7 +120,6 @@ export class SalesService {
         createdAt: new Date().toISOString(),
       },
     };
-
     try {
       await this.docClient.send(new PutCommand(params));
       await this.usersService.createOrUpdateUser(
@@ -178,7 +166,6 @@ export class SalesService {
     if (sale.Item.status !== 'pending') {
       throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
     }
-
     const updateParams: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { id: saleId },
@@ -196,7 +183,6 @@ export class SalesService {
       },
       ReturnValues: 'ALL_NEW' as const,
     };
-
     try {
       console.log('Updating sale status:', { saleId, paymentStatus });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
@@ -263,10 +249,11 @@ export class SalesService {
               (s3Response.Body as Readable).on('error', reject);
             });
             return {
-              ContentType: 'image/png',
-              Filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
-              ContentID: `qr-${ticket.ticketId}`,
-              Content: body,
+              content: body.toString('base64'),
+              filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+              type: 'image/png',
+              disposition: 'attachment',
+              contentId: `qr-${ticket.ticketId}`,
             };
           }),
         );
@@ -288,37 +275,13 @@ Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Gracias por tu compra!
 Equipo Groove Tickets
         `;
-        const rawEmail = [
-          `From: ${this.configService.get<string>('SES_EMAIL') || 'alexis@laikad.com'}`,
-          `To: ${user.email}`,
-          `Subject: Confirmación de Compra - ${event?.name || 'Evento'}`,
-          'MIME-Version: 1.0',
-          'Content-Type: multipart/mixed; boundary="boundary"',
-          '',
-          '--boundary',
-          'Content-Type: text/plain; charset=UTF-8',
-          '',
-          emailBody,
-          ...qrAttachments.map((attachment) =>
-            [
-              '--boundary',
-              `Content-Type: ${attachment.ContentType}`,
-              `Content-Disposition: attachment; filename="${attachment.Filename}"`,
-              `Content-Transfer-Encoding: base64`,
-              `Content-ID: <${attachment.ContentID}>`,
-              '',
-              attachment.Content.toString('base64'),
-            ].join('\n'),
-          ),
-          '--boundary--',
-        ].join('\n');
         console.log('Sending email to:', user.email);
-        const emailParams = {
-          RawMessage: {
-            Data: Buffer.from(rawEmail),
-          },
-        };
-        await this.sesClient.send(new SendRawEmailCommand(emailParams));
+        await this.emailService.sendConfirmationEmail(
+          user.email,
+          `Confirmación de Compra - ${event?.name || 'Evento'}`,
+          emailBody,
+          qrAttachments,
+        );
         console.log('Email sent successfully');
         return { ...result.Attributes, tickets };
       }
