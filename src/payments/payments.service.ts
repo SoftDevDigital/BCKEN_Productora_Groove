@@ -49,13 +49,13 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `${apiBaseUrl}/payments/success?saleId=${saleId}`,
-        failure: `${apiBaseUrl}/payments/failure?saleId=${saleId}`,
-        pending: `${apiBaseUrl}/payments/pending?saleId=${saleId}`,
+        success: `https://api.fest-go.com/payments/success?saleId=${saleId}`,
+        failure: `https://api.fest-go.com/payments/failure?saleId=${saleId}`,
+        pending: `https://api.fest-go.com/payments/pending?saleId=${saleId}`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `${apiBaseUrl}/sales/webhook`,
+      notification_url: `https://api.fest-go.com/sales/webhook`,
     };
 
     try {
