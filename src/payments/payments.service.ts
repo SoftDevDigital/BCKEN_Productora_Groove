@@ -8,8 +8,10 @@ export class PaymentsService {
   public client: MercadoPagoConfig;
 
   constructor(private configService: ConfigService) {
-    const accessToken =
-      'MERCADOPAGO_ACCESS_TOKEN_PROD';
+    const accessToken = this.configService.get<string>(
+      'MERCADOPAGO_ACCESS_TOKEN_PROD',
+    );
+
     if (!accessToken) {
       throw new BadRequestException(
         'MERCADOPAGO_ACCESS_TOKEN_PROD is not defined in environment variables',
@@ -24,7 +26,7 @@ export class PaymentsService {
   async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
     const preference = new Preference(this.client);
     const apiBaseUrl = this.configService.get<string>('URL_DOMINIO_BACKEND');
-    
+
     if (!apiBaseUrl) {
       throw new BadRequestException(
         'API_BASE_URL is not defined in environment variables',
