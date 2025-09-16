@@ -9,13 +9,12 @@ export class PaymentsService {
 
   constructor(private configService: ConfigService) {
     const accessToken =
-      'APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390';
+      'MERCADOPAGO_ACCESS_TOKEN_PROD';
     if (!accessToken) {
       throw new BadRequestException(
-        'MERCADO_PAGO_ACCESS_TOKEN is not defined in environment variables',
+        'MERCADOPAGO_ACCESS_TOKEN_PROD is not defined in environment variables',
       );
     }
-    console.log('MercadoPago Access Token:', accessToken); // Log para debug
     this.client = new MercadoPagoConfig({
       accessToken,
       options: { timeout: 5000 },
@@ -24,7 +23,8 @@ export class PaymentsService {
 
   async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
     const preference = new Preference(this.client);
-    const apiBaseUrl = this.configService.get<string>('API_BASE_URL');
+    const apiBaseUrl = this.configService.get<string>('URL_DOMINIO_BACKEND');
+    
     if (!apiBaseUrl) {
       throw new BadRequestException(
         'API_BASE_URL is not defined in environment variables',
@@ -47,13 +47,13 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `https://df2c6b52db81.ngrok-free.app/payments/success?saleId=${saleId}`,
-        failure: `https://df2c6b52db81.ngrok-free.app/payments/failure?saleId=${saleId}`,
-        pending: `https://df2c6b52db81.ngrok-free.app/payments/pending?saleId=${saleId}`,
+        success: `${apiBaseUrl}/payments/success?saleId=${saleId}`,
+        failure: `${apiBaseUrl}/payments/failure?saleId=${saleId}`,
+        pending: `${apiBaseUrl}/payments/pending?saleId=${saleId}`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `https://df2c6b52db81.ngrok-free.app/sales/webhook`,
+      notification_url: `${apiBaseUrl}/sales/webhook`,
     };
 
     try {
@@ -76,10 +76,6 @@ export class PaymentsService {
     const payment = new Payment(this.client);
     try {
       const response = await payment.get({ id: paymentId });
-      console.log('Payment status retrieved:', {
-        id: paymentId,
-        status: response.status,
-      }); // Log para debug
       return response;
     } catch (error) {
       console.error('Error retrieving payment status:', error); // Log para debug
