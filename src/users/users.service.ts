@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   forwardRef,
+  NotFoundException,
 } from '@nestjs/common';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -22,13 +23,11 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import { User } from './users/types';
-
 @Injectable()
 export class UsersService {
   private readonly tableName = 'Users-v2';
   private readonly docClient: DynamoDBDocumentClient;
   private readonly cognitoClient: CognitoIdentityProviderClient;
-
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
     @Inject(forwardRef(() => SalesService))
@@ -42,7 +41,6 @@ export class UsersService {
       region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
     });
   }
-
   async createOrUpdateUser(userId: string, role: string, email: string) {
     const params = {
       TableName: this.tableName,
@@ -57,6 +55,7 @@ export class UsersService {
     };
     try {
       await this.docClient.send(new PutCommand(params));
+      console.log('Usuario creado/actualizado:', { userId, role, email });
       return {
         userId,
         role,
@@ -65,56 +64,86 @@ export class UsersService {
         soldTickets: role === 'Reseller' ? [] : undefined,
       };
     } catch (error) {
+      console.error('Error al crear/actualizar usuario:', error);
       throw new HttpException(
         'Error al crear/actualizar usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async updateUserTickets(
     userId: string,
     ticketIds: string[],
     resellerId?: string,
   ) {
-    const updateExpressionParts: string[] = [];
-    const expressionAttributeNames: { [key: string]: string } = {};
-    const expressionAttributeValues: { [key: string]: any } = {};
-
-    updateExpressionParts.push(
-      'SET #purchasedTickets = list_append(if_not_exists(#purchasedTickets, :empty_list), :ticketIds)',
-    );
-    expressionAttributeNames['#purchasedTickets'] = 'purchasedTickets';
-    expressionAttributeValues[':ticketIds'] = ticketIds;
-    expressionAttributeValues[':empty_list'] = [];
-
-    if (resellerId) {
-      updateExpressionParts.push(
-        'SET #soldTickets = list_append(if_not_exists(#soldTickets, :empty_list), :ticketIds)',
-      );
-      expressionAttributeNames['#soldTickets'] = 'soldTickets';
-    }
-
-    const params = {
-      TableName: this.tableName,
-      Key: { id: userId },
-      UpdateExpression: updateExpressionParts.join(', '),
-      ExpressionAttributeNames: expressionAttributeNames,
-      ExpressionAttributeValues: expressionAttributeValues,
-      ReturnValues: 'ALL_NEW' as const,
-    };
-
     try {
+      // Verificar si el usuario existe
+      const user = await this.getUserProfile(userId);
+      if (!user) {
+        throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+      }
+      const updateExpressionParts: string[] = [];
+      const expressionAttributeNames: { [key: string]: string } = {};
+      const expressionAttributeValues: { [key: string]: any } = {};
+
+      // Actualizar purchasedTickets
+      updateExpressionParts.push(
+        '#purchasedTickets = list_append(if_not_exists(#purchasedTickets, :empty_list), :ticketIds)',
+      );
+      expressionAttributeNames['#purchasedTickets'] = 'purchasedTickets';
+      expressionAttributeValues[':ticketIds'] = ticketIds;
+      expressionAttributeValues[':empty_list'] = [];
+
+      if (resellerId) {
+        // Verificar si el reseller existe
+        const reseller = await this.getUserProfile(resellerId);
+        if (!reseller) {
+          throw new NotFoundException(`Revendedor no encontrado: ${resellerId}`);
+        }
+        // Actualizar soldTickets
+        updateExpressionParts.push(
+          '#soldTickets = list_append(if_not_exists(#soldTickets, :empty_list), :ticketIds)',
+        );
+        expressionAttributeNames['#soldTickets'] = 'soldTickets';
+      }
+
+      const params = {
+        TableName: this.tableName,
+        Key: { id: userId },
+        UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW' as const,
+      };
+
+      console.log('Ejecutando UpdateCommand:', {
+        userId,
+        params: JSON.stringify(params),
+      });
       const result = await this.docClient.send(new UpdateCommand(params));
+      console.log('Tickets actualizados para usuario:', {
+        userId,
+        ticketIds,
+        resellerId,
+        updatedAttributes: result.Attributes,
+      });
       return result.Attributes;
     } catch (error) {
+      console.error('Error al actualizar tickets de usuario:', {
+        userId,
+        ticketIds,
+        resellerId,
+        error: error.message,
+      });
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new HttpException(
-        'Error al actualizar tickets de usuario',
+        `Error al actualizar tickets de usuario: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async getUserProfile(userId: string) {
     const params = {
       TableName: this.tableName,
@@ -123,11 +152,12 @@ export class UsersService {
     try {
       const result = await this.docClient.send(new GetCommand(params));
       if (!result.Item) {
-        throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+        throw new NotFoundException(`Usuario no encontrado: ${userId}`);
       }
       return result.Item;
     } catch (error) {
-      if (error instanceof HttpException) {
+      console.error('Error al obtener perfil:', error);
+      if (error instanceof NotFoundException) {
         throw error;
       }
       throw new HttpException(
@@ -136,7 +166,6 @@ export class UsersService {
       );
     }
   }
-
   async getUserByEmailOrAlias(emailOrAlias: string): Promise<User | null> {
     const params = {
       TableName: this.tableName,
@@ -151,13 +180,13 @@ export class UsersService {
         ? (result.Items[0] as User)
         : null;
     } catch (error) {
+      console.error('Error al buscar usuario por email o alias:', error);
       throw new HttpException(
         'Error al buscar usuario por email o alias',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async getAllUsers(): Promise<User[]> {
     const params = {
       TableName: this.tableName,
@@ -169,9 +198,7 @@ export class UsersService {
         users.map(async (user: any) => {
           try {
             const command = new AdminGetUserCommand({
-              UserPoolId: this.configService.get<string>(
-                'COGNITO_USER_POOL_ID',
-              ),
+              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
               Username: user.id,
             });
             const cognitoUser = await this.cognitoClient.send(command);
@@ -187,10 +214,7 @@ export class UsersService {
               email: attributes['email'] || user.email,
             };
           } catch (error) {
-            console.error(
-              `Error fetching Cognito data for user ${user.id}:`,
-              error,
-            );
+            console.error(`Error fetching Cognito data for user ${user.id}:`, error);
             return {
               ...user,
               given_name: 'N/A',
@@ -202,13 +226,13 @@ export class UsersService {
       );
       return enrichedUsers as User[];
     } catch (error) {
+      console.error('Error al listar usuarios:', error);
       throw new HttpException(
         'Error al listar usuarios',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async getUserPurchases(userId: string) {
     try {
       const salesResult = await this.docClient.send(
@@ -258,6 +282,7 @@ export class UsersService {
       );
       return purchases;
     } catch (error) {
+      console.error('Error al obtener compras del usuario:', error);
       throw new HttpException(
         'Error al obtener compras del usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
