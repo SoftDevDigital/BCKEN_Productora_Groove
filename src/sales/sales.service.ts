@@ -154,22 +154,18 @@ export class SalesService {
   }
 
   async confirmSale(saleId: string, paymentStatus: string, paymentId: string) {
-    console.log("entro a confirmSale con saleId:", saleId, "y paymentStatus:", paymentStatus); // Log para debug
     const sale = await this.docClient.send(
       new GetCommand({
         TableName: this.tableName,
         Key: { id: saleId },
       }),
     );
-    console.log("paso sale: ", sale); // Log para debug
     if (!sale.Item) {
       throw new HttpException('Venta no encontrada', HttpStatus.NOT_FOUND);
     }
-
     if (sale.Item.status !== 'pending') {
       throw new HttpException('Venta ya procesada', HttpStatus.BAD_REQUEST);
     }
-    console.log("esta por entrar en updateParams");
     const updateParams: UpdateCommandInput = {
       TableName: this.tableName,
       Key: { id: saleId },
@@ -187,18 +183,14 @@ export class SalesService {
       },
       ReturnValues: 'ALL_NEW' as const,
     };
-    console.log("paso updateParams");
-    console.log("updateParams preparados:", updateParams); // Log para debug
     try {
       console.log('Updating sale status:', { saleId, paymentStatus });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
-      console.log("resultado de updateCommand:", result); // Log para debug
       if (paymentStatus === 'approved') {
         console.log('Decrementing tickets:', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
-        console.log("decremento de cantidad de ticket")
         await this.batchesService.decrementTickets(
           sale.Item.eventId,
           sale.Item.batchId,
@@ -212,13 +204,11 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
         });
-        console.log("tickets creados:", tickets); // Log para debug
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
         console.log('Updating user tickets:', {
           userId: sale.Item.userId,
           ticketIds,
         });
-        console.log("actualizo tickets del usuario")
         await this.usersService.updateUserTickets(
           sale.Item.userId,
           ticketIds,
@@ -232,12 +222,10 @@ export class SalesService {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
-
         const batch = await this.batchesService.findOne(
           sale.Item.eventId,
           sale.Item.batchId,
         );
-        console.log('Preparing email with QR codes');
 
         const qrAttachments = await Promise.all(
           tickets.map(async (ticket, index) => {
@@ -284,7 +272,6 @@ export class SalesService {
             }
           }),
         );
-        console.log('QR attachments prepared:', qrAttachments.length);
 
         const emailBody = `
 Hola ${user.alias || 'Usuario'},
@@ -327,16 +314,12 @@ Equipo Groove Tickets
     const payment = await this.paymentsService.getPaymentStatus(paymentId);
     const status = payment.status;
     const saleId = payment.external_reference;
-    console.log("handleWebhook llamado con paymentId:", paymentId, "status:", status, "saleId:", saleId); // Log para debug
     if (!saleId) {
-      console.log("entro a saleId no encontrado");
       throw new HttpException(
         'No se encontró referencia de venta',
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log("no entro a saleId no encontrado, saleId es:", saleId);
-    console.log("esta por entrar a confirmSale");
     await this.confirmSale(saleId, status, paymentId);
     return { status: 'processed', saleId, paymentStatus: status };
   }
