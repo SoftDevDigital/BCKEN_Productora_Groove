@@ -24,7 +24,7 @@ export class SalesService {
   private readonly tableName = 'Sales-v2';
   private readonly docClient: DynamoDBDocumentClient;
   private readonly s3Client: S3Client;
-  private readonly DIRECT_SALE_FEE = 1; // Costo fijo por ticket en compras directas
+  private readonly DIRECT_SALE_FEE = 2000;
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
     private readonly eventsService: EventsService,
