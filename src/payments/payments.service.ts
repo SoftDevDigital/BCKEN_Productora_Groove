@@ -1,3 +1,4 @@
+// Updated: src/payments/payments.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
@@ -6,12 +7,10 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = this.configService.get<string>(
-      'MERCADOPAGO_ACCESS_TOKEN_PROD',
-    );
+    const accessToken = 'APP_USR-1049987662578660-091714-2f127cb7d32ec0c4d4760493f6b757d5-481807388'
     if (!accessToken) {
       throw new BadRequestException(
-        'MERCADOPAGO_ACCESS_TOKEN_PROD no está definido en las variables de entorno',
+        'MERCADOPAGO_ACCESS_TOKEN_PROD is not defined in environment variables',
       );
     }
     this.client = new MercadoPagoConfig({
@@ -20,18 +19,13 @@ export class PaymentsService {
     });
   }
   async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
-    if (!saleId) {
-      throw new BadRequestException('El saleId es requerido');
-    }
     const preference = new Preference(this.client);
-    const apiBaseUrl = this.configService.get<string>('URL_DOMINIO_BACKEND');
+    const apiBaseUrl = this.configService.get<string>('URL_DOMINIO_BACKEND') || 'https://api.fest-go.com';
     if (!apiBaseUrl) {
       throw new BadRequestException(
-        'URL_DOMINIO_BACKEND no está definido en las variables de entorno',
+        'API_BASE_URL is not defined in environment variables',
       );
     }
-    const successUrl = `${apiBaseUrl}/payments/success?saleId=${saleId}`;
-    const failureUrl = `${apiBaseUrl}/payments/failure?saleId=${saleId}`;
     const preferenceData = {
       items: [
         {
@@ -48,48 +42,36 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: successUrl,
-        failure: failureUrl,
-        pending: successUrl, // Redirige pending a success
+        success: `https://api.fest-go.com/payments/success`,
+        failure: `https://api.fest-go.com/payments/failure`,
+        pending: `https://api.fest-go.com/payments/success`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `${apiBaseUrl}/sales/webhook`,
+      notification_url: `https://api.fest-go.com/sales/webhook`,
     };
     try {
       const response = await preference.create({ body: preferenceData });
-      console.log('Preferencia creada:', {
-        preferenceId: response.id,
-        saleId,
-        init_point: response.init_point,
-      });
+      console.log('Preference created:', response.id); // Log para debug
       return {
         paymentLink: response.init_point,
         preferenceId: response.id,
         saleId,
       };
     } catch (error) {
-      console.error('Error al generar preferencia:', error);
+      console.error('Error generating preference:', error); // Log para debug
       throw new BadRequestException(
         `Error al generar link de pago: ${error.message}`,
       );
     }
   }
   async getPaymentStatus(paymentId: string): Promise<any> {
-    if (!paymentId) {
-      throw new BadRequestException('El paymentId es requerido');
-    }
     const payment = new Payment(this.client);
     try {
       const response = await payment.get({ id: paymentId });
-      console.log('Estado del pago obtenido:', {
-        paymentId,
-        status: response.status,
-        external_reference: response.external_reference,
-      });
       return response;
     } catch (error) {
-      console.error('Error al obtener estado del pago:', error);
+      console.error('Error retrieving payment status:', error); // Log para debug
       throw new BadRequestException(
         `Error al verificar pago: ${error.message}`,
       );
