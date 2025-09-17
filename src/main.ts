@@ -8,7 +8,7 @@ let server: Handler;
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: 'https://fest-go.com',
+    origin: ['https://fest-go.com', 'http://localhost:3000'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Authorization',
     credentials: true,
@@ -33,7 +33,7 @@ if (process.env.NODE_ENV !== 'production') {
   async function startLocal() {
     const app = await NestFactory.create(AppModule);
     app.enableCors({
-      origin: 'https://fest-go.com',
+      origin: ['https://fest-go.com', 'http://localhost:3000'],
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
       allowedHeaders: 'Content-Type, Authorization',
       credentials: true,
