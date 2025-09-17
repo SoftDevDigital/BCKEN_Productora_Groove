@@ -34,16 +34,22 @@ export class PaymentsController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log("fase 2")
+      
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
+      console.log("paso payment validate")
+      console.log("payment obtenido:", payment); // Log para debug
       if (
         payment.status !== 'approved' ||
         payment.external_reference !== saleId
       ) {
+        console.log("entro al error")
         throw new HttpException(
           'Pago no aprobado o mismatch en saleId',
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log("paso el error")
       await this.salesService.confirmSale(saleId, 'approved', paymentId);
       const frontendUrl = 'https://fest-go.com/account';
       res.redirect(302, `${frontendUrl}/success?saleId=${saleId}`);

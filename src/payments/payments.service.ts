@@ -74,9 +74,12 @@ export class PaymentsService {
   }
 
   async getPaymentStatus(paymentId: string): Promise<any> {
+    console.log("entro a getPaymentStatus con paymentId:", paymentId); // Log para debug
     const payment = new Payment(this.client);
+    console.log("objeto payment creado:", payment); // Log para debug
     try {
       const response = await payment.get({ id: paymentId });
+      console.log("response de getPaymentStatus:", response); // Log para debug
       return response;
     } catch (error) {
       console.error('Error retrieving payment status:', error); // Log para debug

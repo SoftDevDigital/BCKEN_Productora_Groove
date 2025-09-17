@@ -144,10 +144,14 @@ export class SalesController {
 
   @Post('webhook')
   async handleWebhook(@Body() body: any) {
+    console.log("entro a webhook con body:", body); // Log para debug
     try {
       if (body.action === 'payment.updated') {
+        console.log("entro al if de webhook")
         const paymentId = body.data.id;
+          console.log("paymentId extraido:", paymentId); // Log para debug
         await this.salesService.handleWebhook(paymentId);
+        console.log("webhook procesado correctamente para paymentId:", paymentId); // Log para debug
       }
       return {
         statusCode: HttpStatus.OK,
