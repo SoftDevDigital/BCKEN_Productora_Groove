@@ -1,4 +1,3 @@
-// Updated: src/payments/payments.controller.ts
 import {
   Controller,
   Get,
@@ -6,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
   Res,
+  NotFoundException,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { SalesService } from '../sales/sales.service';
@@ -18,115 +18,84 @@ export class PaymentsController {
     private readonly salesService: SalesService,
     private readonly configService: ConfigService,
   ) {}
+  private validateId(id: string, fieldName: string = 'ID'): void {
+    if (!id || id.trim() === '') {
+      throw new HttpException(`El ${fieldName} no puede estar vacío`, HttpStatus.BAD_REQUEST);
+    }
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(id)) {
+      throw new HttpException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`, HttpStatus.BAD_REQUEST);
+    }
+  }
   @Get('success')
   async handleSuccess(
-    @Query('external_reference') saleId: string,
+    @Query('saleId') saleId: string,
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
-    console.log('ENTROOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO');
-    console.log('handleSuccess called:', { saleId, paymentId }); // Log para debug
+    console.log('handleSuccess llamado:', { saleId, paymentId });
     try {
-      if (!saleId || !paymentId) {
-        throw new HttpException(
-          'Faltan parámetros external_reference o collection_id',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      this.validateId(saleId, 'saleId');
+      this.validateId(paymentId, 'paymentId');
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      if (
-        payment.status !== 'approved' ||
-        payment.external_reference !== saleId
-      ) {
+      if (payment.external_reference !== saleId) {
         throw new HttpException(
-          'Pago no aprobado o mismatch en saleId',
+          'Mismatch en saleId con external_reference',
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.salesService.confirmSale(saleId, 'approved', paymentId);
-      const frontendUrl = 'https://fest-go.com/account';
-      res.redirect(302, `${frontendUrl}/success?saleId=${saleId}`);
+      if (payment.status !== 'approved' && payment.status !== 'pending') {
+        throw new HttpException(
+          `Estado de pago inválido: ${payment.status}. Use la ruta /failure para pagos rechazados`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      await this.salesService.confirmSale(saleId, payment.status, paymentId);
+      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+      const redirectPath = payment.status === 'approved' ? 'success' : 'pending';
+      console.log('Redirigiendo a:', `${frontendUrl}/${redirectPath}?saleId=${saleId}`);
+      res.redirect(302, `${frontendUrl}/${redirectPath}?saleId=${saleId}`);
     } catch (error) {
-      console.error('Error en handleSuccess:', error); // Log para debug
-      const frontendUrl =
-        this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://fest-go.com';
-      res.redirect(302, `${frontendUrl}`);
+      console.error('Error en handleSuccess:', error);
+      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      console.log('Redirigiendo por error a:', `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
+      res.redirect(302, `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
     }
   }
   @Get('failure')
   async handleFailure(
-    @Query('external_reference') saleId: string,
+    @Query('saleId') saleId: string,
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
+    console.log('handleFailure llamado:', { saleId, paymentId });
     try {
-      if (!saleId || !paymentId) {
+      this.validateId(saleId, 'saleId');
+      this.validateId(paymentId, 'paymentId');
+      const payment = await this.paymentsService.getPaymentStatus(paymentId);
+      if (payment.status !== 'rejected') {
         throw new HttpException(
-          'Faltan parámetros external_reference o collection_id',
+          `Estado de pago inválido: ${payment.status}. Use la ruta /success para pagos aprobados o pendientes`,
           HttpStatus.BAD_REQUEST,
         );
       }
-      const payment = await this.paymentsService.getPaymentStatus(paymentId);
       if (payment.external_reference !== saleId) {
         throw new HttpException(
-          'Mismatch en saleId',
+          'Mismatch en saleId con external_reference',
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.salesService.confirmSale(saleId, payment.status, paymentId);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
-      if (!frontendUrl) {
-        throw new HttpException(
-          'FRONTEND_BASE_URL is not defined in environment variables',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
+      await this.salesService.confirmSale(saleId, 'rejected', paymentId);
+      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+      console.log('Redirigiendo a:', `${frontendUrl}/failure?saleId=${saleId}`);
       res.redirect(302, `${frontendUrl}/failure?saleId=${saleId}`);
     } catch (error) {
-      console.error('Error en handleFailure:', error); // Log para debug
-      const frontendUrl =
-        this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://fest-go.com';
-      res.redirect(302, `${frontendUrl}`);
-    }
-  }
-  @Get('pending')
-  async handlePending(
-    @Query('external_reference') saleId: string,
-    @Query('collection_id') paymentId: string,
-    @Res() res: Response,
-  ) {
-    try {
-      if (!saleId || !paymentId) {
-        throw new HttpException(
-          'Faltan parámetros external_reference o collection_id',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      console.log('Payment status:', payment); // Log para debug
-      if (payment.external_reference !== saleId) {
-        throw new HttpException(
-          'Mismatch en saleId',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      await this.salesService.confirmSale(saleId, payment.status, paymentId);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
-      if (!frontendUrl) {
-        throw new HttpException(
-          'FRONTEND_BASE_URL is not defined in environment variables',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-      res.redirect(302, `${frontendUrl}/pending?saleId=${saleId}`);
-    } catch (error) {
-      console.error('Error en handlePending:', error); // Log para debug
-      const frontendUrl =
-        this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://fest-go.com';
-      res.redirect(302, `${frontendUrl}`);
+      console.error('Error en handleFailure:', error);
+      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      console.log('Redirigiendo por error a:', `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
+      res.redirect(302, `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
     }
   }
 }

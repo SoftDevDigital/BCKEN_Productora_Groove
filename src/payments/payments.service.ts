@@ -1,5 +1,4 @@
-// Updated: src/payments/payments.service.ts
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import { CreateQrDto } from './dto/create-qr.dto';
@@ -7,25 +6,48 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = 'APP_USR-1049987662578660-091714-2f127cb7d32ec0c4d4760493f6b757d5-481807388'
-    if (!accessToken) {
-      throw new BadRequestException(
-        'MERCADOPAGO_ACCESS_TOKEN_PROD is not defined in environment variables',
+    const accessToken = this.configService.get<string>('MERCADOPAGO_ACCESS_TOKEN_PROD');
+    if (!accessToken || accessToken.trim() === '') {
+      throw new InternalServerErrorException(
+        'MERCADOPAGO_ACCESS_TOKEN_PROD no está definido o está vacío en las variables de entorno',
       );
     }
-    this.client = new MercadoPagoConfig({
-      accessToken,
-      options: { timeout: 5000 },
-    });
+    try {
+      this.client = new MercadoPagoConfig({
+        accessToken,
+        options: { timeout: 5000 },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error al inicializar el cliente de Mercado Pago: configuración inválida',
+      );
+    }
+  }
+  private validateId(id: string, fieldName: string = 'ID'): void {
+    if (!id || id.trim() === '') {
+      throw new BadRequestException(`El ${fieldName} no puede estar vacío`);
+    }
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(id)) {
+      throw new BadRequestException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`);
+    }
+  }
+  private validateNumber(value: number, fieldName: string, allowZero: boolean = false): void {
+    if (typeof value !== 'number' || (allowZero ? value < 0 : value <= 0)) {
+      throw new BadRequestException(
+        `El ${fieldName} debe ser un número ${allowZero ? 'no negativo' : 'positivo'}`,
+      );
+    }
   }
   async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
-    const preference = new Preference(this.client);
-    const apiBaseUrl = this.configService.get<string>('URL_DOMINIO_BACKEND') || 'https://api.fest-go.com';
-    if (!apiBaseUrl) {
-      throw new BadRequestException(
-        'API_BASE_URL is not defined in environment variables',
-      );
+    this.validateId(saleId, 'saleId');
+    if (!dto.title || !dto.title.trim()) {
+      throw new BadRequestException('El título es requerido y no puede estar vacío');
     }
+    this.validateNumber(dto.amount, 'monto');
+    const preference = new Preference(this.client);
+    const successUrl = `https://api.fest-go.com/payments/success?saleId=${saleId}`;
+    const failureUrl = `https://api.fest-go.com/payments/failure?saleId=${saleId}`;
     const preferenceData = {
       items: [
         {
@@ -42,37 +64,55 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `https://api.fest-go.com/payments/success`,
-        failure: `https://api.fest-go.com/payments/failure`,
-        pending: `https://api.fest-go.com/payments/success`,
+        success: 'https://api.fest-go.com/payments/success?saleId=${saleId}',
+        failure: `https://api.fest-go.com/payments/failure?saleId=${saleId}`,
+        pending: 'https://api.fest-go.com/payments/success?saleId=${saleId}', // Redirige pending a success
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `https://api.fest-go.com/sales/webhook`,
+      notification_url: 'https://api.fest-go.com/sales/webhook?source_news=webhooks',
     };
     try {
       const response = await preference.create({ body: preferenceData });
-      console.log('Preference created:', response.id); // Log para debug
+      console.log('Preferencia creada:', {
+        preferenceId: response.id,
+        saleId,
+        init_point: response.init_point,
+      });
+      if (!response.init_point) {
+        throw new InternalServerErrorException(
+          'Respuesta inválida de Mercado Pago: init_point no está presente',
+        );
+      }
       return {
         paymentLink: response.init_point,
         preferenceId: response.id,
         saleId,
       };
     } catch (error) {
-      console.error('Error generating preference:', error); // Log para debug
-      throw new BadRequestException(
+      console.error('Error al generar preferencia:', error);
+      throw new InternalServerErrorException(
         `Error al generar link de pago: ${error.message}`,
       );
     }
   }
   async getPaymentStatus(paymentId: string): Promise<any> {
+    this.validateId(paymentId, 'paymentId');
     const payment = new Payment(this.client);
     try {
       const response = await payment.get({ id: paymentId });
+      console.log('Estado del pago obtenido:', {
+        paymentId,
+        status: response.status,
+        external_reference: response.external_reference,
+      });
       return response;
     } catch (error) {
-      console.error('Error retrieving payment status:', error); // Log para debug
-      throw new BadRequestException(
+      console.error('Error al obtener estado del pago:', error);
+      if (error.status === 404) {
+        throw new NotFoundException(`Pago no encontrado: ${paymentId}`);
+      }
+      throw new InternalServerErrorException(
         `Error al verificar pago: ${error.message}`,
       );
     }
