@@ -1,3 +1,4 @@
+// Updated: src/payments/payments.controller.ts
 import {
   Controller,
   Get,
@@ -10,7 +11,6 @@ import { PaymentsService } from './payments.service';
 import { SalesService } from '../sales/sales.service';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
-
 @Controller('payments')
 export class PaymentsController {
   constructor(
@@ -18,10 +18,9 @@ export class PaymentsController {
     private readonly salesService: SalesService,
     private readonly configService: ConfigService,
   ) {}
-
   @Get('success')
   async handleSuccess(
-    @Query('saleId') saleId: string,
+    @Query('external_reference') saleId: string,
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
@@ -30,26 +29,20 @@ export class PaymentsController {
     try {
       if (!saleId || !paymentId) {
         throw new HttpException(
-          'Faltan parámetros saleId o collection_id',
+          'Faltan parámetros external_reference o collection_id',
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log("fase 2")
-      
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      console.log("paso payment validate")
-      console.log("payment obtenido:", payment); // Log para debug
       if (
         payment.status !== 'approved' ||
         payment.external_reference !== saleId
       ) {
-        console.log("entro al error")
         throw new HttpException(
           'Pago no aprobado o mismatch en saleId',
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log("paso el error")
       await this.salesService.confirmSale(saleId, 'approved', paymentId);
       const frontendUrl = 'https://fest-go.com/account';
       res.redirect(302, `${frontendUrl}/success?saleId=${saleId}`);
@@ -61,22 +54,27 @@ export class PaymentsController {
       res.redirect(302, `${frontendUrl}`);
     }
   }
-
   @Get('failure')
   async handleFailure(
-    @Query('saleId') saleId: string,
+    @Query('external_reference') saleId: string,
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
     try {
       if (!saleId || !paymentId) {
         throw new HttpException(
-          'Faltan parámetros saleId o collection_id',
+          'Faltan parámetros external_reference o collection_id',
           HttpStatus.BAD_REQUEST,
         );
       }
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      await this.salesService.confirmSale(saleId, 'rejected', paymentId);
+      if (payment.external_reference !== saleId) {
+        throw new HttpException(
+          'Mismatch en saleId',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      await this.salesService.confirmSale(saleId, payment.status, paymentId);
       const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
       if (!frontendUrl) {
         throw new HttpException(
@@ -93,23 +91,28 @@ export class PaymentsController {
       res.redirect(302, `${frontendUrl}`);
     }
   }
-
   @Get('pending')
   async handlePending(
-    @Query('saleId') saleId: string,
+    @Query('external_reference') saleId: string,
     @Query('collection_id') paymentId: string,
     @Res() res: Response,
   ) {
     try {
       if (!saleId || !paymentId) {
         throw new HttpException(
-          'Faltan parámetros saleId o collection_id',
+          'Faltan parámetros external_reference o collection_id',
           HttpStatus.BAD_REQUEST,
         );
       }
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
       console.log('Payment status:', payment); // Log para debug
-      await this.salesService.confirmSale(saleId, 'pending', paymentId);
+      if (payment.external_reference !== saleId) {
+        throw new HttpException(
+          'Mismatch en saleId',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      await this.salesService.confirmSale(saleId, payment.status, paymentId);
       const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
       if (!frontendUrl) {
         throw new HttpException(
