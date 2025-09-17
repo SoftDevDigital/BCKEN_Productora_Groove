@@ -49,9 +49,9 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `https://api.fest-go.com/payment/success?saleId=${saleId}`,
-        failure: `https://api.fest-go.com/payment/failure?saleId=${saleId}`,
-        pending: `https://api.fest-go.com/payment/pending?saleId=${saleId}`,
+        success: `https://api.fest-go.com/payments/success?saleId=${saleId}`,
+        failure: `https://api.fest-go.com/payments/failure?saleId=${saleId}`,
+        pending: `https://api.fest-go.com/payments/pending?saleId=${saleId}`,
       },
       auto_return: 'approved',
       external_reference: saleId,
