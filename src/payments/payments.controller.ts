@@ -51,11 +51,8 @@ export class PaymentsController {
       console.error('Error en handleSuccess:', error); // Log para debug
       const frontendUrl =
         this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://tu-frontend.com';
-      res.redirect(
-        302,
-        `${frontendUrl}/failure?saleId=${saleId}&error=${encodeURIComponent(error.message)}`,
-      );
+        'https://fest-go.com';
+      res.redirect(302, `${frontendUrl}`);
     }
   }
 
@@ -86,11 +83,8 @@ export class PaymentsController {
       console.error('Error en handleFailure:', error); // Log para debug
       const frontendUrl =
         this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://tu-frontend.com';
-      res.redirect(
-        302,
-        `${frontendUrl}/failure?saleId=${saleId}&error=${encodeURIComponent(error.message)}`,
-      );
+        'https://fest-go.com';
+      res.redirect(302, `${frontendUrl}`);
     }
   }
 
@@ -122,11 +116,8 @@ export class PaymentsController {
       console.error('Error en handlePending:', error); // Log para debug
       const frontendUrl =
         this.configService.get<string>('FRONTEND_BASE_URL') ||
-        'https://tu-frontend.com';
-      res.redirect(
-        302,
-        `${frontendUrl}/failure?saleId=${saleId}&error=${encodeURIComponent(error.message)}`,
-      );
+        'https://fest-go.com';
+      res.redirect(302, `${frontendUrl}`);
     }
   }
 }
