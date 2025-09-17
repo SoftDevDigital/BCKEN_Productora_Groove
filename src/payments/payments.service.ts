@@ -7,9 +7,7 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = this.configService.get<string>(
-      'MERCADOPAGO_ACCESS_TOKEN_PROD',
-    );
+    const accessToken = 'APP_USR-1049987662578660-091714-2f127cb7d32ec0c4d4760493f6b757d5-481807388'
     if (!accessToken) {
       throw new BadRequestException(
         'MERCADOPAGO_ACCESS_TOKEN_PROD is not defined in environment variables',
@@ -44,13 +42,13 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: `${apiBaseUrl}/payments/success`,
-        failure: `${apiBaseUrl}/payments/failure`,
-        pending: `${apiBaseUrl}/payments/pending`,
+        success: `https://api.fest-go.com/payments/success`,
+        failure: `https://api.fest-go.com/payments/failure`,
+        pending: `https://api.fest-go.com/payments/pending`,
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: `${apiBaseUrl}/sales/webhook`,
+      notification_url: `https://api.fest-go.com/sales/webhook`,
     };
     try {
       const response = await preference.create({ body: preferenceData });
