@@ -226,38 +226,53 @@ export class SalesService {
           sale.Item.eventId,
           sale.Item.batchId,
         );
-        console.log('Preparing QR attachments:', ticketIds);
+
         const qrAttachments = await Promise.all(
           tickets.map(async (ticket, index) => {
-            const qrKey = ticket.qrS3Url.split('.amazonaws.com/')[1];
-            const s3Response = await this.s3Client.send(
-              new GetObjectCommand({
-                Bucket:
-                  this.configService.get<string>('S3_BUCKET') ||
-                  'ticket-qr-bucket-dev-v2',
-                Key: qrKey,
-              }),
-            );
-            const body = await new Promise<Buffer>((resolve, reject) => {
-              const chunks: Buffer[] = [];
-              (s3Response.Body as Readable).on('data', (chunk) =>
-                chunks.push(chunk),
+            try {
+              const qrKey = ticket.qrS3Url
+                .split('.amazonaws.com/')[1]
+                .replace(/^\/+/, ''); // Remove leading slashes
+              const s3Response = await this.s3Client.send(
+                new GetObjectCommand({
+                  Bucket:
+                    this.configService.get<string>('S3_BUCKET') ||
+                    'ticket-qr-bucket-dev-v2',
+                  Key: qrKey,
+                }),
               );
-              (s3Response.Body as Readable).on('end', () =>
-                resolve(Buffer.concat(chunks)),
+
+              // Ensure the S3 response body exists
+              if (!s3Response.Body) {
+                throw new Error(
+                  `No body returned for QR code with key: ${qrKey}`,
+                );
+              }
+
+              // Convert the S3 response body to a Buffer
+              const body = await s3Response.Body.transformToByteArray();
+              const buffer = Buffer.from(body);
+
+              return {
+                content: buffer.toString('base64'),
+                filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+                type: 'image/png',
+                disposition: 'attachment',
+                contentId: `qr-${ticket.ticketId}`,
+              };
+            } catch (error) {
+              console.error(
+                `Error fetching QR code for ticket ${ticket.ticketId}:`,
+                error,
               );
-              (s3Response.Body as Readable).on('error', reject);
-            });
-            return {
-              content: body.toString('base64'),
-              filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
-              type: 'image/png',
-              disposition: 'attachment',
-              contentId: `qr-${ticket.ticketId}`,
-            };
+              throw new HttpException(
+                `Failed to fetch QR code for ticket ${ticket.ticketId}: ${error.message}`,
+                HttpStatus.INTERNAL_SERVER_ERROR,
+              );
+            }
           }),
         );
-        console.log('Preparing email body');
+
         const emailBody = `
 Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.

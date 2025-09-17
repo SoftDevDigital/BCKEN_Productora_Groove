@@ -35,7 +35,6 @@ export class PaymentsController {
         );
       }
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
-      console.log('Payment status:', payment); // Log para debug
       if (
         payment.status !== 'approved' ||
         payment.external_reference !== saleId
@@ -46,13 +45,7 @@ export class PaymentsController {
         );
       }
       await this.salesService.confirmSale(saleId, 'approved', paymentId);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL');
-      if (!frontendUrl) {
-        throw new HttpException(
-          'FRONTEND_BASE_URL is not defined in environment variables',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
+      const frontendUrl = 'https://fest-go.com/account';
       res.redirect(302, `${frontendUrl}/success?saleId=${saleId}`);
     } catch (error) {
       console.error('Error en handleSuccess:', error); // Log para debug
