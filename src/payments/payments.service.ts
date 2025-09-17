@@ -6,7 +6,7 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = this.configService.get<string>('MERCADOPAGO_ACCESS_TOKEN_PROD');
+    const accessToken = 'APP_USR-1049987662578660-091714-2f127cb7d32ec0c4d4760493f6b757d5-481807388'
     if (!accessToken || accessToken.trim() === '') {
       throw new InternalServerErrorException(
         'MERCADOPAGO_ACCESS_TOKEN_PROD no está definido o está vacío en las variables de entorno',
@@ -32,6 +32,11 @@ export class PaymentsService {
       throw new BadRequestException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`);
     }
   }
+  private validatePaymentId(id: string, fieldName: string = 'paymentId'): void {
+    if (!id || id.trim() === '') {
+      throw new BadRequestException(`El ${fieldName} no puede estar vacío`);
+    }
+  }
   private validateNumber(value: number, fieldName: string, allowZero: boolean = false): void {
     if (typeof value !== 'number' || (allowZero ? value < 0 : value <= 0)) {
       throw new BadRequestException(
@@ -46,8 +51,6 @@ export class PaymentsService {
     }
     this.validateNumber(dto.amount, 'monto');
     const preference = new Preference(this.client);
-    const successUrl = `https://api.fest-go.com/payments/success?saleId=${saleId}`;
-    const failureUrl = `https://api.fest-go.com/payments/failure?saleId=${saleId}`;
     const preferenceData = {
       items: [
         {
@@ -64,13 +67,13 @@ export class PaymentsService {
         installments: 1,
       },
       back_urls: {
-        success: 'https://api.fest-go.com/payments/success?saleId=${saleId}',
+        success: `https://api.fest-go.com/payments/success?saleId=${saleId}`,
         failure: `https://api.fest-go.com/payments/failure?saleId=${saleId}`,
-        pending: 'https://api.fest-go.com/payments/success?saleId=${saleId}', // Redirige pending a success
+        pending: `https://api.fest-go.com/payments/success?saleId=${saleId}`, // Redirige pending a success
       },
       auto_return: 'approved',
       external_reference: saleId,
-      notification_url: 'https://api.fest-go.com/sales/webhook?source_news=webhooks',
+      notification_url: `https://api.fest-go.com/sales/webhook?source_news=webhooks`,
     };
     try {
       const response = await preference.create({ body: preferenceData });
@@ -97,7 +100,7 @@ export class PaymentsService {
     }
   }
   async getPaymentStatus(paymentId: string): Promise<any> {
-    this.validateId(paymentId, 'paymentId');
+    this.validatePaymentId(paymentId, 'paymentId');
     const payment = new Payment(this.client);
     try {
       const response = await payment.get({ id: paymentId });
