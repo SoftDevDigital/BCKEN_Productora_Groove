@@ -27,6 +27,11 @@ export class PaymentsController {
       throw new HttpException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`, HttpStatus.BAD_REQUEST);
     }
   }
+  private validatePaymentId(id: string, fieldName: string = 'paymentId'): void {
+    if (!id || id.trim() === '') {
+      throw new HttpException(`El ${fieldName} no puede estar vacío`, HttpStatus.BAD_REQUEST);
+    }
+  }
   @Get('success')
   async handleSuccess(
     @Query('saleId') saleId: string,
@@ -36,7 +41,7 @@ export class PaymentsController {
     console.log('handleSuccess llamado:', { saleId, paymentId });
     try {
       this.validateId(saleId, 'saleId');
-      this.validateId(paymentId, 'paymentId');
+      this.validatePaymentId(paymentId, 'paymentId');
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
       if (payment.external_reference !== saleId) {
         throw new HttpException(
@@ -72,7 +77,7 @@ export class PaymentsController {
     console.log('handleFailure llamado:', { saleId, paymentId });
     try {
       this.validateId(saleId, 'saleId');
-      this.validateId(paymentId, 'paymentId');
+      this.validatePaymentId(paymentId, 'paymentId');
       const payment = await this.paymentsService.getPaymentStatus(paymentId);
       if (payment.status !== 'rejected') {
         throw new HttpException(
