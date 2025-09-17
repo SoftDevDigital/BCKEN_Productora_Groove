@@ -282,9 +282,66 @@ export class UsersService {
       );
       return purchases;
     } catch (error) {
-      console.error('Error al obtener compras del usuario:', error);
+      console.error('Error al obtener compras del usuario:', { userId, error: error.message });
       throw new HttpException(
         'Error al obtener compras del usuario',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+  async getUserSales(userId: string) {
+    try {
+      const salesResult = await this.docClient.send(
+        new ScanCommand({
+          TableName: 'Sales-v2',
+          FilterExpression: 'resellerId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
+        }),
+      );
+      const sales = salesResult.Items || [];
+      const salesData = await Promise.all(
+        sales.map(async (sale) => {
+          const event = await this.eventsService.findOne(sale.eventId);
+          const batch = await this.batchesService.findOne(
+            sale.eventId,
+            sale.batchId,
+          );
+          const ticketsResult = await this.docClient.send(
+            new ScanCommand({
+              TableName: 'Tickets-v2',
+              FilterExpression: 'saleId = :saleId',
+              ExpressionAttributeValues: { ':saleId': sale.id },
+            }),
+          );
+          const tickets = ticketsResult.Items || [];
+          return {
+            saleId: sale.id,
+            event: event
+              ? {
+                  id: event.id,
+                  name: event.name,
+                  from: event.from,
+                  to: event.to,
+                  location: event.location,
+                }
+              : null,
+            batch: batch
+              ? { id: batch.batchId, name: batch.name, price: batch.price }
+              : null,
+            quantity: sale.quantity,
+            total: sale.total,
+            status: sale.status,
+            tickets: tickets.map((ticket) => ticket.id),
+            createdAt: sale.createdAt,
+          };
+        }),
+      );
+      console.log('Ventas obtenidas para revendedor:', { userId, sales: salesData });
+      return salesData;
+    } catch (error) {
+      console.error('Error al obtener ventas del revendedor:', { userId, error: error.message });
+      throw new HttpException(
+        'Error al obtener ventas del revendedor',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import type { Request } from 'express';
-
 interface User {
   id: string;
   email: string;
@@ -18,11 +17,9 @@ interface User {
   given_name: string;
   family_name: string;
 }
-
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-
   private getClaims(req: Request): any {
     let claims: any = null;
     if (req['apiGateway']) {
@@ -39,13 +36,11 @@ export class UsersController {
     }
     return claims;
   }
-
   private ensureAuthenticated(claims: any) {
     if (!claims || !claims['sub']) {
       throw new HttpException('No autorizado', HttpStatus.UNAUTHORIZED);
     }
   }
-
   private ensureAdmin(claims: any) {
     const userRole = claims?.['custom:role'] || 'User';
     if (userRole !== 'Admin') {
@@ -55,7 +50,15 @@ export class UsersController {
       );
     }
   }
-
+  private ensureReseller(claims: any) {
+    const userRole = claims?.['custom:role'] || 'User';
+    if (userRole !== 'Reseller') {
+      throw new HttpException(
+        'No autorizado: Requiere rol Reseller',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
   @Get('profile')
   async getProfile(@Req() req: Request) {
     try {
@@ -77,7 +80,6 @@ export class UsersController {
       );
     }
   }
-
   @Get('purchases')
   async getPurchases(@Req() req: Request) {
     try {
@@ -99,7 +101,27 @@ export class UsersController {
       );
     }
   }
-
+  @Get('sales')
+  async getSales(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureReseller(claims);
+      const sales = await this.usersService.getUserSales(claims['sub']);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Ventas obtenidas exitosamente',
+        data: sales,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al obtener ventas',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
   @Get('admin/users')
   async getAllUsers(@Req() req: Request) {
     try {
