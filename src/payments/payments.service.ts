@@ -6,7 +6,7 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = 'APP_USR-1049987662578660-091714-2f127cb7d32ec0c4d4760493f6b757d5-481807388'
+    const accessToken = this.configService.get<string>('MERCADOPAGO_ACCESS_TOKEN_PROD');
     if (!accessToken || accessToken.trim() === '') {
       throw new InternalServerErrorException(
         'MERCADOPAGO_ACCESS_TOKEN_PROD no está definido o está vacío en las variables de entorno',

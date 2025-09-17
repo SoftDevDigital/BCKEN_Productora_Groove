@@ -19,14 +19,12 @@ import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from '../payments/payments.service';
 import { EmailService } from '../email/email.service';
 import { Readable } from 'stream';
-
 @Injectable()
 export class SalesService {
   private readonly tableName = 'Sales-v2';
   private readonly docClient: DynamoDBDocumentClient;
   private readonly s3Client: S3Client;
   private readonly DIRECT_SALE_FEE = 1; // Costo fijo por ticket en compras directas
-
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
     private readonly eventsService: EventsService,
@@ -42,7 +40,6 @@ export class SalesService {
       region: this.configService.get<string>('AWS_REGION'),
     });
   }
-
   async createSale(
     createSaleDto: CreateSaleDto,
     userId: string,
@@ -63,8 +60,7 @@ export class SalesService {
     let finalEmail = email;
     // Para ventas reseller, validar buyerEmailOrAlias si se proporciona
     if (type === 'reseller' && buyerEmailOrAlias) {
-      const user =
-        await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
+      const user = await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
       if (!user) {
         throw new HttpException(
           'El email o alias del comprador no está registrado',
@@ -107,8 +103,7 @@ export class SalesService {
       Item: {
         id: saleId,
         userId: finalUserId,
-        resellerId:
-          type === 'reseller' ? resellerId || providedResellerId : null,
+        resellerId: type === 'reseller' ? resellerId || providedResellerId : null,
         eventId,
         batchId,
         quantity,
@@ -134,6 +129,7 @@ export class SalesService {
           resellerEmail || finalEmail,
         );
       }
+      console.log('Venta creada:', { saleId, userId: finalUserId, type });
       return {
         id: saleId,
         eventId,
@@ -146,13 +142,13 @@ export class SalesService {
         status: 'pending',
       };
     } catch (error) {
+      console.error('Error al registrar la venta:', error);
       throw new HttpException(
         'Error al registrar la venta',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async confirmSale(saleId: string, paymentStatus: string, paymentId: string) {
     const sale = await this.docClient.send(
       new GetCommand({
@@ -184,19 +180,20 @@ export class SalesService {
       ReturnValues: 'ALL_NEW' as const,
     };
     try {
-      console.log('Updating sale status:', { saleId, paymentStatus });
+      console.log('Actualizando estado de venta:', { saleId, paymentStatus, paymentId });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
-        console.log('Decrementing tickets:', {
+        console.log('Decrementando tickets:', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
+          quantity: sale.Item.quantity,
         });
         await this.batchesService.decrementTickets(
           sale.Item.eventId,
           sale.Item.batchId,
           sale.Item.quantity,
         );
-        console.log('Creating tickets for sale:', saleId);
+        console.log('Creando tickets para venta:', saleId);
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -205,20 +202,21 @@ export class SalesService {
           quantity: sale.Item.quantity,
         });
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
-        console.log('Updating user tickets:', {
+        console.log('Actualizando tickets de usuario:', {
           userId: sale.Item.userId,
           ticketIds,
+          resellerId: sale.Item.resellerId,
         });
         await this.usersService.updateUserTickets(
           sale.Item.userId,
           ticketIds,
           sale.Item.resellerId,
         );
-        console.log('Fetching user profile:', sale.Item.userId);
+        console.log('Obteniendo perfil de usuario:', sale.Item.userId);
         const user = await this.usersService.getUserProfile(sale.Item.userId);
-        console.log('Fetching event:', sale.Item.eventId);
+        console.log('Obteniendo evento:', sale.Item.eventId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
-        console.log('Fetching batch:', {
+        console.log('Obteniendo tanda:', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
@@ -226,7 +224,6 @@ export class SalesService {
           sale.Item.eventId,
           sale.Item.batchId,
         );
-
         const qrAttachments = await Promise.all(
           tickets.map(async (ticket, index) => {
             try {
@@ -241,18 +238,13 @@ export class SalesService {
                   Key: qrKey,
                 }),
               );
-
-              // Ensure the S3 response body exists
               if (!s3Response.Body) {
                 throw new Error(
                   `No body returned for QR code with key: ${qrKey}`,
                 );
               }
-
-              // Convert the S3 response body to a Buffer
               const body = await s3Response.Body.transformToByteArray();
               const buffer = Buffer.from(body);
-
               return {
                 content: buffer.toString('base64'),
                 filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
@@ -272,7 +264,6 @@ export class SalesService {
             }
           }),
         );
-
         const emailBody = `
 Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.
@@ -290,37 +281,53 @@ Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Gracias por tu compra!
 Equipo Groove Tickets
         `;
-        console.log('Sending email to:', user.email);
+        console.log('Enviando email a:', user.email);
         await this.emailService.sendConfirmationEmail(
           user.email,
           `Confirmación de Compra - ${event?.name || 'Evento'}`,
           emailBody,
           qrAttachments,
         );
-        console.log('Email sent successfully');
+        console.log('Email enviado exitosamente');
         return { ...result.Attributes, tickets };
       }
       return result.Attributes;
     } catch (error) {
-      console.error('Error in confirmSale:', error);
+      console.error('Error en confirmSale:', {
+        saleId,
+        paymentStatus,
+        paymentId,
+        error: error.message,
+      });
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         `Error al confirmar la venta: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-
   async handleWebhook(paymentId: string) {
-    const payment = await this.paymentsService.getPaymentStatus(paymentId);
-    const status = payment.status;
-    const saleId = payment.external_reference;
-    if (!saleId) {
+    try {
+      const payment = await this.paymentsService.getPaymentStatus(paymentId);
+      const status = payment.status;
+      const saleId = payment.external_reference;
+      if (!saleId) {
+        throw new HttpException(
+          'No se encontró referencia de venta',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      console.log('Procesando webhook:', { paymentId, status, saleId });
+      await this.confirmSale(saleId, status, paymentId);
+      return { status: 'processed', saleId, paymentStatus: status };
+    } catch (error) {
+      console.error('Error en handleWebhook:', error);
       throw new HttpException(
-        'No se encontró referencia de venta',
-        HttpStatus.BAD_REQUEST,
+        `Error al procesar webhook: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    await this.confirmSale(saleId, status, paymentId);
-    return { status: 'processed', saleId, paymentStatus: status };
   }
 }
