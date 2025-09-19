@@ -20,16 +20,26 @@ export class PaymentsController {
   ) {}
   private validateId(id: string, fieldName: string = 'ID'): void {
     if (!id || id.trim() === '') {
-      throw new HttpException(`El ${fieldName} no puede estar vacío`, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        `El ${fieldName} no puede estar vacío`,
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const uuidRegex =
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     if (!uuidRegex.test(id)) {
-      throw new HttpException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        `El ${fieldName} no tiene un formato válido (debe ser un UUID)`,
+        HttpStatus.BAD_REQUEST,
+      );
     }
   }
   private validatePaymentId(id: string, fieldName: string = 'paymentId'): void {
     if (!id || id.trim() === '') {
-      throw new HttpException(`El ${fieldName} no puede estar vacío`, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        `El ${fieldName} no puede estar vacío`,
+        HttpStatus.BAD_REQUEST,
+      );
     }
   }
   @Get('success')
@@ -56,16 +66,31 @@ export class PaymentsController {
         );
       }
       await this.salesService.confirmSale(saleId, payment.status, paymentId);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
-      const redirectPath = payment.status === 'approved' ? 'success' : 'pending';
-      console.log('Redirigiendo a:', `${frontendUrl}/${redirectPath}?saleId=${saleId}`);
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_BASE_URL') ||
+        'https://fest-go.com';
+      const redirectPath =
+        payment.status === 'approved' ? 'success' : 'pending';
+      console.log(
+        'Redirigiendo a:',
+        `${frontendUrl}/${redirectPath}?saleId=${saleId}`,
+      );
       res.redirect(302, `${frontendUrl}/${redirectPath}?saleId=${saleId}`);
     } catch (error) {
       console.error('Error en handleSuccess:', error);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      console.log('Redirigiendo por error a:', `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
-      res.redirect(302, `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_BASE_URL') ||
+        'https://fest-go.com';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Error desconocido';
+      console.log(
+        'Redirigiendo por error a:',
+        `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`,
+      );
+      res.redirect(
+        302,
+        `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`,
+      );
     }
   }
   @Get('failure')
@@ -92,15 +117,26 @@ export class PaymentsController {
         );
       }
       await this.salesService.confirmSale(saleId, 'rejected', paymentId);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_BASE_URL') ||
+        'https://fest-go.com';
       console.log('Redirigiendo a:', `${frontendUrl}/failure?saleId=${saleId}`);
       res.redirect(302, `${frontendUrl}/failure?saleId=${saleId}`);
     } catch (error) {
       console.error('Error en handleFailure:', error);
-      const frontendUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      console.log('Redirigiendo por error a:', `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
-      res.redirect(302, `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`);
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_BASE_URL') ||
+        'https://fest-go.com';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Error desconocido';
+      console.log(
+        'Redirigiendo por error a:',
+        `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`,
+      );
+      res.redirect(
+        302,
+        `${frontendUrl}?error=${encodeURIComponent(errorMessage)}`,
+      );
     }
   }
 }

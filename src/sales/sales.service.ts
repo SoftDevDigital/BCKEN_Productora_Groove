@@ -60,7 +60,8 @@ export class SalesService {
     let finalEmail = email;
     // Para ventas reseller, validar buyerEmailOrAlias si se proporciona
     if (type === 'reseller' && buyerEmailOrAlias) {
-      const user = await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
+      const user =
+        await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
       if (!user) {
         throw new HttpException(
           'El email o alias del comprador no está registrado',
@@ -103,7 +104,8 @@ export class SalesService {
       Item: {
         id: saleId,
         userId: finalUserId,
-        resellerId: type === 'reseller' ? resellerId || providedResellerId : null,
+        resellerId:
+          type === 'reseller' ? resellerId || providedResellerId : null,
         eventId,
         batchId,
         quantity,
@@ -180,7 +182,11 @@ export class SalesService {
       ReturnValues: 'ALL_NEW' as const,
     };
     try {
-      console.log('Actualizando estado de venta:', { saleId, paymentStatus, paymentId });
+      console.log('Actualizando estado de venta:', {
+        saleId,
+        paymentStatus,
+        paymentId,
+      });
       const result = await this.docClient.send(new UpdateCommand(updateParams));
       if (paymentStatus === 'approved') {
         console.log('Decrementando tickets:', {

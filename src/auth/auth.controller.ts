@@ -24,12 +24,10 @@ export class AuthController {
 
   private getClaims(req: Request): any {
     let claims: any = null;
-    // Caso Lambda con API Gateway
     if (req['apiGateway']) {
       const ctx = req['apiGateway'].event.requestContext;
       claims = ctx.authorizer?.jwt?.claims || ctx.authorizer?.claims || null;
     }
-    // Caso local con Express
     if (!claims) {
       const token = req.headers['authorization']?.replace('Bearer ', '');
       if (token) {

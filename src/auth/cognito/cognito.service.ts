@@ -14,14 +14,18 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { UsersService } from '../../users/users.service'; // Importar UsersService
 
 @Injectable()
 export class CognitoService {
   private client: CognitoIdentityProviderClient;
   private lastResend: { [email: string]: number } = {};
-  private readonly validRoles = ['User', 'Reseller', 'Admin']; // Roles válidos
+  private readonly validRoles = ['User', 'Reseller', 'Admin'];
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private usersService: UsersService, // Inyectar UsersService
+  ) {
     this.client = new CognitoIdentityProviderClient({
       region: this.configService.get<string>('AWS_REGION'),
     });
@@ -60,7 +64,7 @@ export class CognitoService {
           { Name: 'given_name', Value: name },
           { Name: 'family_name', Value: last_name },
           { Name: 'custom:country', Value: 'default' },
-          { Name: 'custom:role', Value: 'User' }, // Siempre 'User'
+          { Name: 'custom:role', Value: 'User' },
         ],
       });
       const result = await this.client.send(command);
@@ -70,7 +74,7 @@ export class CognitoService {
       };
     } catch (error) {
       if (error.name === 'UsernameExistsException') {
-        throw error; // Propagado al controller para 409
+        throw error;
       }
       if (error.name === 'InvalidParameterException') {
         throw new BadRequestException(
@@ -146,7 +150,12 @@ export class CognitoService {
         ConfirmationCode: confirmationCode,
         SecretHash: secretHash,
       });
-      return this.client.send(command);
+      const result = await this.client.send(command);
+
+      // Crear o actualizar usuario en DynamoDB tras confirmación
+      await this.usersService.createOrUpdateUser(email, 'User', email);
+
+      return result;
     } catch (error) {
       if (error.name === 'CodeMismatchException') {
         throw new BadRequestException('Código de verificación incorrecto.');
@@ -192,7 +201,12 @@ export class CognitoService {
         UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
         Username: username,
       });
-      return this.client.send(command);
+      const result = await this.client.send(command);
+
+      // Crear o actualizar usuario en DynamoDB tras confirmación administrativa
+      await this.usersService.createOrUpdateUser(username, 'User', username);
+
+      return result;
     } catch (error) {
       throw new InternalServerErrorException(
         'Error al confirmar usuario manualmente.',
