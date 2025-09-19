@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import { CreateQrDto } from './dto/create-qr.dto';
@@ -6,7 +11,9 @@ import { CreateQrDto } from './dto/create-qr.dto';
 export class PaymentsService {
   public client: MercadoPagoConfig;
   constructor(private configService: ConfigService) {
-    const accessToken = this.configService.get<string>('MERCADOPAGO_ACCESS_TOKEN_PROD');
+    const accessToken = this.configService.get<string>(
+      'MERCADOPAGO_ACCESS_TOKEN_PROD',
+    );
     if (!accessToken || accessToken.trim() === '') {
       throw new InternalServerErrorException(
         'MERCADOPAGO_ACCESS_TOKEN_PROD no está definido o está vacío en las variables de entorno',
@@ -27,9 +34,12 @@ export class PaymentsService {
     if (!id || id.trim() === '') {
       throw new BadRequestException(`El ${fieldName} no puede estar vacío`);
     }
-    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const uuidRegex =
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     if (!uuidRegex.test(id)) {
-      throw new BadRequestException(`El ${fieldName} no tiene un formato válido (debe ser un UUID)`);
+      throw new BadRequestException(
+        `El ${fieldName} no tiene un formato válido (debe ser un UUID)`,
+      );
     }
   }
   private validatePaymentId(id: string, fieldName: string = 'paymentId'): void {
@@ -37,7 +47,11 @@ export class PaymentsService {
       throw new BadRequestException(`El ${fieldName} no puede estar vacío`);
     }
   }
-  private validateNumber(value: number, fieldName: string, allowZero: boolean = false): void {
+  private validateNumber(
+    value: number,
+    fieldName: string,
+    allowZero: boolean = false,
+  ): void {
     if (typeof value !== 'number' || (allowZero ? value < 0 : value <= 0)) {
       throw new BadRequestException(
         `El ${fieldName} debe ser un número ${allowZero ? 'no negativo' : 'positivo'}`,
@@ -47,7 +61,9 @@ export class PaymentsService {
   async generateQr(dto: CreateQrDto, saleId: string): Promise<any> {
     this.validateId(saleId, 'saleId');
     if (!dto.title || !dto.title.trim()) {
-      throw new BadRequestException('El título es requerido y no puede estar vacío');
+      throw new BadRequestException(
+        'El título es requerido y no puede estar vacío',
+      );
     }
     this.validateNumber(dto.amount, 'monto');
     const preference = new Preference(this.client);

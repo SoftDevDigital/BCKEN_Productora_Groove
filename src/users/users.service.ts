@@ -3,7 +3,6 @@ import {
   Inject,
   HttpException,
   HttpStatus,
-  forwardRef,
   NotFoundException,
 } from '@nestjs/common';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -14,7 +13,6 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { SalesService } from '../sales/sales.service';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
 import {
@@ -30,8 +28,6 @@ export class UsersService {
   private readonly cognitoClient: CognitoIdentityProviderClient;
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDbClient: DynamoDBClient,
-    @Inject(forwardRef(() => SalesService))
-    private readonly salesService: SalesService,
     private readonly eventsService: EventsService,
     private readonly batchesService: BatchesService,
     private readonly configService: ConfigService,
@@ -98,7 +94,9 @@ export class UsersService {
         // Verificar si el reseller existe
         const reseller = await this.getUserProfile(resellerId);
         if (!reseller) {
-          throw new NotFoundException(`Revendedor no encontrado: ${resellerId}`);
+          throw new NotFoundException(
+            `Revendedor no encontrado: ${resellerId}`,
+          );
         }
         // Actualizar soldTickets
         updateExpressionParts.push(
@@ -198,7 +196,9 @@ export class UsersService {
         users.map(async (user: any) => {
           try {
             const command = new AdminGetUserCommand({
-              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+              UserPoolId: this.configService.get<string>(
+                'COGNITO_USER_POOL_ID',
+              ),
               Username: user.id,
             });
             const cognitoUser = await this.cognitoClient.send(command);
@@ -214,7 +214,10 @@ export class UsersService {
               email: attributes['email'] || user.email,
             };
           } catch (error) {
-            console.error(`Error fetching Cognito data for user ${user.id}:`, error);
+            console.error(
+              `Error fetching Cognito data for user ${user.id}:`,
+              error,
+            );
             return {
               ...user,
               given_name: 'N/A',
@@ -282,7 +285,10 @@ export class UsersService {
       );
       return purchases;
     } catch (error) {
-      console.error('Error al obtener compras del usuario:', { userId, error: error.message });
+      console.error('Error al obtener compras del usuario:', {
+        userId,
+        error: error.message,
+      });
       throw new HttpException(
         'Error al obtener compras del usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -336,10 +342,16 @@ export class UsersService {
           };
         }),
       );
-      console.log('Ventas obtenidas para revendedor:', { userId, sales: salesData });
+      console.log('Ventas obtenidas para revendedor:', {
+        userId,
+        sales: salesData,
+      });
       return salesData;
     } catch (error) {
-      console.error('Error al obtener ventas del revendedor:', { userId, error: error.message });
+      console.error('Error al obtener ventas del revendedor:', {
+        userId,
+        error: error.message,
+      });
       throw new HttpException(
         'Error al obtener ventas del revendedor',
         HttpStatus.INTERNAL_SERVER_ERROR,
