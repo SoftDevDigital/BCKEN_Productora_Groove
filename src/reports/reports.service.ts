@@ -172,4 +172,95 @@ export class ReportsService {
       );
     }
   }
+
+  async getResellersReport() {
+    try {
+      // Get all users with reseller role
+      const allUsers = await this.usersService.getAllUsers();
+      const resellers = allUsers.filter(user => user.role === 'Reseller');
+
+      // Get all approved sales
+      const salesResult = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.salesTable,
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: { ':status': 'approved' },
+        }),
+      );
+      const approvedSales = salesResult.Items || [];
+
+      // Calculate stats for each reseller
+      const resellerStats = await Promise.all(
+        resellers.map(async (reseller) => {
+          // Filter sales for this reseller
+          const resellerSales = approvedSales.filter(sale => sale.resellerId === reseller.id);
+          
+          // Calculate totals
+          const totalTicketsSold = resellerSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
+          const totalRevenue = resellerSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+          const totalSales = resellerSales.length;
+          
+          // Calculate average ticket price
+          const averageTicketPrice = totalTicketsSold > 0 ? totalRevenue / totalTicketsSold : 0;
+          
+          // Get sales by event for this reseller
+          const salesByEvent = {};
+          for (const sale of resellerSales) {
+            const eventId = sale.eventId;
+            if (!salesByEvent[eventId]) {
+              const event = await this.eventsService.findOne(eventId);
+              salesByEvent[eventId] = {
+                eventName: event?.name || 'Unknown',
+                ticketsSold: 0,
+                revenue: 0,
+                sales: 0,
+              };
+            }
+            salesByEvent[eventId].ticketsSold += sale.quantity;
+            salesByEvent[eventId].revenue += sale.total;
+            salesByEvent[eventId].sales += 1;
+          }
+
+          return {
+            resellerId: reseller.id,
+            name: `${reseller.given_name} ${reseller.family_name}`,
+            email: reseller.email,
+            totalSales,
+            totalTicketsSold,
+            totalRevenue,
+            averageTicketPrice: Math.round(averageTicketPrice * 100) / 100,
+            salesByEvent,
+            createdAt: reseller.createdAt,
+          };
+        }),
+      );
+
+      // Sort by total revenue descending
+      resellerStats.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      // Calculate overall stats
+      const totalResellers = resellerStats.length;
+      const totalRevenueAll = resellerStats.reduce((sum, reseller) => sum + reseller.totalRevenue, 0);
+      const totalTicketsAll = resellerStats.reduce((sum, reseller) => sum + reseller.totalTicketsSold, 0);
+      const totalSalesAll = resellerStats.reduce((sum, reseller) => sum + reseller.totalSales, 0);
+
+      return {
+        summary: {
+          totalResellers,
+          totalRevenue: totalRevenueAll,
+          totalTicketsSold: totalTicketsAll,
+          totalSales: totalSalesAll,
+          averageRevenuePerReseller: totalResellers > 0 ? Math.round((totalRevenueAll / totalResellers) * 100) / 100 : 0,
+        },
+        resellers: resellerStats,
+      };
+    } catch (error) {
+      console.error('Error al generar reporte de revendedores:', error);
+      throw new HttpException(
+        'Error al generar reporte de revendedores',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
