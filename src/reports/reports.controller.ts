@@ -108,4 +108,26 @@ export class ReportsController {
       );
     }
   }
+
+  @Get('resellers')
+  async getResellersReport(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const report = await this.reportsService.getResellersReport();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Reporte de revendedores obtenido exitosamente',
+        data: report,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al generar reporte de revendedores',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
