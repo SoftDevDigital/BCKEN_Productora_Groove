@@ -34,21 +34,23 @@ export class ReportsService {
         new ScanCommand({ TableName: this.salesTable }),
       );
       const sales = salesResult.Items || [];
-      const totalSales = sales.length;
-      const totalRevenue = sales.reduce(
+      // Considerar solo ventas aprobadas para métricas de tickets y recaudación
+      const approvedSales = sales.filter((sale) => sale.status === 'approved');
+      const totalSales = approvedSales.length;
+      const totalRevenue = approvedSales.reduce(
         (sum, sale) => sum + (sale.total || 0),
         0,
       );
       const salesByType = {
-        direct: sales.filter((sale) => sale.type === 'direct').length,
-        reseller: sales.filter((sale) => sale.type === 'reseller').length,
+        direct: approvedSales.filter((sale) => sale.type === 'direct').length,
+        reseller: approvedSales.filter((sale) => sale.type === 'reseller').length,
       };
-      const ticketsSold = sales.reduce(
+      const ticketsSold = approvedSales.reduce(
         (sum, sale) => sum + (sale.quantity || 0),
         0,
       );
       const salesByEvent = {};
-      for (const sale of sales) {
+      for (const sale of approvedSales) {
         const eventId = sale.eventId;
         if (!salesByEvent[eventId]) {
           const event = await this.eventsService.findOne(eventId);
