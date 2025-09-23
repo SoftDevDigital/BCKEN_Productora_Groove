@@ -140,7 +140,8 @@ export class UsersController {
           family_name: user.family_name,
           role: user.role,
           purchasedTickets: user.purchasedTickets,
-          soldTickets: user.soldTickets,
+          // Solo mostrar soldTickets para usuarios con rol Reseller
+          ...(user.role === 'Reseller' && { soldTickets: user.soldTickets }),
           createdAt: user.createdAt,
         })),
       };
