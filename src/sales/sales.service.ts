@@ -58,6 +58,17 @@ export class SalesService {
     } = createSaleDto;
     let finalUserId = userId;
     let finalEmail = email;
+
+    // Validar que solo usuarios con rol Reseller puedan crear ventas de tipo reseller
+    if (type === 'reseller') {
+      const user = await this.usersService.getUserProfile(userId);
+      if (!user || user.role !== 'Reseller') {
+        throw new HttpException(
+          'Solo usuarios con rol Reseller pueden crear ventas de tipo reseller',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
     // Para ventas reseller, validar buyerEmailOrAlias si se proporciona
     if (type === 'reseller' && buyerEmailOrAlias) {
       const user =
