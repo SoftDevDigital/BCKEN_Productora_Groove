@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Delete,
+  Param,
   Req,
   HttpException,
   HttpStatus,
@@ -148,6 +150,28 @@ export class UsersController {
       }
       throw new HttpException(
         'Error al listar usuarios',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('admin/users/:userId')
+  async deleteUser(@Param('userId') userId: string, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      
+      const result = await this.usersService.deleteUser(userId);
+      return {
+        statusCode: HttpStatus.OK,
+        message: result.message,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al eliminar usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -12,12 +12,14 @@ import {
   GetCommand,
   ScanCommand,
   UpdateCommand,
+  DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
 import {
   CognitoIdentityProviderClient,
   AdminGetUserCommand,
+  AdminDeleteUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import { User } from './users/types';
@@ -365,6 +367,55 @@ export class UsersService {
       });
       throw new HttpException(
         'Error al obtener ventas del revendedor',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async deleteUser(userId: string): Promise<{ message: string }> {
+    try {
+      // First, check if user exists in DynamoDB
+      const user = await this.docClient.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: { id: userId },
+        }),
+      );
+
+      if (!user.Item) {
+        throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+      }
+
+      // Delete user from DynamoDB
+      await this.docClient.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: { id: userId },
+        }),
+      );
+
+      // Delete user from Cognito (if exists)
+      try {
+        await this.cognitoClient.send(
+          new AdminDeleteUserCommand({
+            UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+            Username: userId,
+          }),
+        );
+      } catch (cognitoError) {
+        console.warn(`User ${userId} not found in Cognito or already deleted:`, cognitoError.message);
+        // Continue even if Cognito deletion fails
+      }
+
+      console.log(`Usuario ${userId} eliminado exitosamente`);
+      return { message: `Usuario ${userId} eliminado exitosamente` };
+    } catch (error) {
+      console.error('Error al eliminar usuario:', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        `Error al eliminar usuario: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
