@@ -300,8 +300,9 @@ export class UsersService {
       const salesResult = await this.docClient.send(
         new ScanCommand({
           TableName: 'Sales-v2',
-          FilterExpression: 'resellerId = :userId',
-          ExpressionAttributeValues: { ':userId': userId },
+          FilterExpression: 'resellerId = :userId AND #status = :status',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: { ':userId': userId, ':status': 'approved' },
         }),
       );
       const sales = salesResult.Items || [];
