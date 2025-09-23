@@ -186,14 +186,24 @@ export class UsersService {
     }
   }
   async getAllUsers(): Promise<User[]> {
-    const params = {
-      TableName: this.tableName,
-    };
     try {
-      const result = await this.docClient.send(new ScanCommand(params));
-      const users = result.Items || [];
+      let allUsers: any[] = [];
+      let lastEvaluatedKey: any = undefined;
+      
+      // Paginate through all results to get complete list
+      do {
+        const params = {
+          TableName: this.tableName,
+          ...(lastEvaluatedKey && { ExclusiveStartKey: lastEvaluatedKey }),
+        };
+        
+        const result = await this.docClient.send(new ScanCommand(params));
+        allUsers = allUsers.concat(result.Items || []);
+        lastEvaluatedKey = result.LastEvaluatedKey;
+      } while (lastEvaluatedKey);
+
       const enrichedUsers = await Promise.all(
-        users.map(async (user: any) => {
+        allUsers.map(async (user: any) => {
           try {
             const command = new AdminGetUserCommand({
               UserPoolId: this.configService.get<string>(
