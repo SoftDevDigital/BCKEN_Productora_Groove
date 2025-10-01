@@ -167,18 +167,23 @@ export class UsersService {
     }
   }
   async getUserByEmailOrAlias(emailOrAlias: string): Promise<User | null> {
-    const params = {
-      TableName: this.tableName,
-      FilterExpression: 'email = :value OR alias = :value',
-      ExpressionAttributeValues: {
-        ':value': emailOrAlias,
-      },
-    };
+    const normalized = (emailOrAlias || '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
     try {
-      const result = await this.docClient.send(new ScanCommand(params));
-      return result.Items && result.Items.length > 0
-        ? (result.Items[0] as User)
-        : null;
+      // Realizamos un scan completo y aplicamos coincidencia case-insensitive en memoria
+      // para evitar fallos por mayúsculas/minúsculas o espacios accidentales.
+      const result = await this.docClient.send(
+        new ScanCommand({ TableName: this.tableName }),
+      );
+      const items = (result.Items || []) as User[];
+      const found = items.find((u: any) => {
+        const email = (u.email || '').toLowerCase();
+        const alias = (u.alias || '').toLowerCase();
+        return email === normalized || alias === normalized;
+      });
+      return found || null;
     } catch (error) {
       console.error('Error al buscar usuario por email o alias:', error);
       throw new HttpException(
