@@ -167,21 +167,34 @@ export class UsersService {
     }
   }
   async getUserByEmailOrAlias(emailOrAlias: string): Promise<User | null> {
-    const normalized = (emailOrAlias || '').trim().toLowerCase();
-    if (!normalized) {
+    const raw = (emailOrAlias || '').trim();
+    const normalized = raw.toLowerCase();
+    if (!raw) {
       return null;
     }
     try {
-      // Realizamos un scan completo y aplicamos coincidencia case-insensitive en memoria
-      // para evitar fallos por mayúsculas/minúsculas o espacios accidentales.
+      // 1) Intentar buscar por id == email enviado (algunos usuarios usan email como id)
+      try {
+        const byId = await this.docClient.send(
+          new GetCommand({ TableName: this.tableName, Key: { id: raw } }),
+        );
+        if (byId.Item) {
+          return byId.Item as User;
+        }
+      } catch (inner) {
+        // Continuar con la búsqueda secundaria si falla el Get
+      }
+
+      // 2) Scan y comparar case-insensitive contra email, alias o id
       const result = await this.docClient.send(
         new ScanCommand({ TableName: this.tableName }),
       );
       const items = (result.Items || []) as User[];
       const found = items.find((u: any) => {
+        const id = (u.id || '').toLowerCase();
         const email = (u.email || '').toLowerCase();
         const alias = (u.alias || '').toLowerCase();
-        return email === normalized || alias === normalized;
+        return id === normalized || email === normalized || alias === normalized;
       });
       return found || null;
     } catch (error) {
