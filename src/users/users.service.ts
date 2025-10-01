@@ -205,6 +205,46 @@ export class UsersService {
       );
     }
   }
+
+  // Búsqueda robusta para sincronización de roles desde Cognito
+  async findUserForRoleSync(
+    cognitoSub: string,
+    email: string,
+  ): Promise<User | null> {
+    // 1) Buscar por id = sub de Cognito
+    try {
+      const bySub = await this.docClient.send(
+        new GetCommand({ TableName: this.tableName, Key: { id: cognitoSub } }),
+      );
+      if (bySub.Item) {
+        return bySub.Item as User;
+      }
+    } catch {}
+    // 2) Buscar por id = email (algunos registros usan email como id)
+    try {
+      const byEmailId = await this.docClient.send(
+        new GetCommand({ TableName: this.tableName, Key: { id: email } }),
+      );
+      if (byEmailId.Item) {
+        return byEmailId.Item as User;
+      }
+    } catch {}
+    // 3) Escanear por atributo email
+    try {
+      const scan = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression: 'email = :email',
+          ExpressionAttributeValues: { ':email': email },
+        }),
+      );
+      const item = (scan.Items || [])[0] as User | undefined;
+      return item || null;
+    } catch (error) {
+      console.error('Error en findUserForRoleSync:', error);
+      return null;
+    }
+  }
   async getAllUsers(): Promise<User[]> {
     try {
       let allUsers: any[] = [];

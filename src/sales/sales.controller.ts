@@ -71,6 +71,9 @@ export class SalesController {
         dto,
         claims['sub'],
         claims['email'],
+        undefined,
+        undefined,
+        claims['custom:role'] || 'User', // Pasar el rol del JWT
       );
       const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
       const qr = await this.paymentsService.generateQr(
@@ -115,6 +118,7 @@ export class SalesController {
         claims['email'],
         claims['sub'],
         claims['email'],
+        claims['custom:role'] || 'User', // Pasar el rol del JWT
       );
       const batch = await this.batchesService.findOne(dto.eventId, dto.batchId);
       const qr = await this.paymentsService.generateQr(

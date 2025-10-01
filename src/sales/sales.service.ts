@@ -46,6 +46,7 @@ export class SalesService {
     email: string,
     resellerId?: string,
     resellerEmail?: string,
+    userRole?: string, // Agregar el rol del JWT
   ) {
     const saleId = uuidv4();
     const {
@@ -61,8 +62,9 @@ export class SalesService {
 
     // Validar que solo usuarios con rol Reseller puedan crear ventas de tipo reseller
     if (type === 'reseller') {
-      const user = await this.usersService.getUserProfile(userId);
-      if (!user || user.role !== 'Reseller') {
+      // Usar el rol del JWT token en lugar del de DynamoDB para consistencia
+      const roleToCheck = userRole || 'User';
+      if (roleToCheck !== 'Reseller') {
         throw new HttpException(
           'Solo usuarios con rol Reseller pueden crear ventas de tipo reseller',
           HttpStatus.FORBIDDEN,

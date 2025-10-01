@@ -175,6 +175,26 @@ export class AuthController {
     }
   }
 
+  @Post('admin/sync-roles')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async syncRoles(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const result = await this.cognitoService.syncAllUserRoles();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Roles sincronizados exitosamente',
+        data: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Error al sincronizar roles',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('admin/confirm-signup')
   @UsePipes(new ValidationPipe({ transform: true }))
   async adminConfirm(@Req() req: Request, @Body() dto: AdminConfirmDto) {
