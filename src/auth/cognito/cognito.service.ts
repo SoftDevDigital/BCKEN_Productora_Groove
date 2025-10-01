@@ -11,6 +11,7 @@ import {
   ConfirmSignUpCommand,
   ResendConfirmationCodeCommand,
   AdminConfirmSignUpCommand,
+  AdminGetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -127,17 +128,112 @@ export class CognitoService {
           'Rol inválido. Use: User, Reseller o Admin.',
         );
       }
+      
+      // 1. Actualizar rol en Cognito
       const command = new AdminUpdateUserAttributesCommand({
         UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
         Username: userSub,
         UserAttributes: [{ Name: 'custom:role', Value: role }],
       });
-      return this.client.send(command);
+      await this.client.send(command);
+      
+      // 2. Actualizar rol en DynamoDB también, con búsqueda robusta
+      // Obtener email real de Cognito para asegurar coherencia
+      const cognitoUser = await this.client.send(
+        new AdminGetUserCommand({
+          UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+          Username: userSub,
+        }),
+      );
+      const attrs = (cognitoUser.UserAttributes || []).reduce(
+        (acc: Record<string, string>, a) => ((acc[a.Name as string] = a.Value || ''), acc),
+        {},
+      );
+      const email = attrs['email'] || '';
+      const existing = await this.usersService.findUserForRoleSync(userSub, email);
+      await this.usersService.createOrUpdateUser(
+        existing?.id || userSub,
+        role,
+        existing?.email || email || userSub,
+      );
+      console.log(`Rol actualizado en DynamoDB: ${(existing?.id || userSub)} -> ${role}`);
+      
+      return { message: 'Rol actualizado exitosamente' };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
       }
       throw new InternalServerErrorException('Error al asignar rol.');
+    }
+  }
+
+  async syncAllUserRoles() {
+    try {
+      const users = await this.usersService.getAllUsers();
+      const syncResults: Array<{
+        userId: string;
+        email: string;
+        status: 'updated' | 'already_synced' | 'error';
+        oldRole?: string;
+        newRole?: string;
+        role?: string;
+        error?: string;
+      }> = [];
+      
+      for (const user of users) {
+        try {
+          // Obtener el rol actual de Cognito
+          const cognitoUser = await this.client.send(
+            new AdminGetUserCommand({
+              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+              Username: user.id,
+            }),
+          );
+          
+          const cognitoRole = cognitoUser.UserAttributes?.find(
+            attr => attr.Name === 'custom:role'
+          )?.Value || 'User';
+          
+          // Si el rol en DynamoDB es diferente al de Cognito, actualizar DynamoDB
+          if (user.role !== cognitoRole) {
+            await this.usersService.createOrUpdateUser(user.id, cognitoRole, user.email);
+            syncResults.push({
+              userId: user.id,
+              email: user.email,
+              oldRole: user.role,
+              newRole: cognitoRole,
+              status: 'updated'
+            });
+            console.log(`Rol sincronizado: ${user.id} (${user.email}) ${user.role} -> ${cognitoRole}`);
+          } else {
+            syncResults.push({
+              userId: user.id,
+              email: user.email,
+              role: user.role,
+              status: 'already_synced'
+            });
+          }
+        } catch (error: any) {
+          console.error(`Error sincronizando usuario ${user.id}:`, error);
+          syncResults.push({
+            userId: user.id,
+            email: user.email,
+            status: 'error',
+            error: (error && (error.message || String(error)))
+          });
+        }
+      }
+      
+      return {
+        totalUsers: users.length,
+        synced: syncResults.filter(r => r.status === 'updated').length,
+        alreadySynced: syncResults.filter(r => r.status === 'already_synced').length,
+        errors: syncResults.filter(r => r.status === 'error').length,
+        details: syncResults
+      };
+    } catch (error) {
+      console.error('Error en syncAllUserRoles:', error);
+      throw new InternalServerErrorException('Error al sincronizar roles de usuarios');
     }
   }
 
