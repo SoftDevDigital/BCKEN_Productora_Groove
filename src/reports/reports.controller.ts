@@ -130,4 +130,104 @@ export class ReportsController {
       );
     }
   }
+
+  @Get('scans/:eventId')
+  async getScansCountByEvent(@Param('eventId') eventId: string, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      
+      try {
+        this.ensureAdmin(claims);
+      } catch (authError: any) {
+        console.error('Error de autorización:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Admin',
+          error: 'FORBIDDEN',
+        };
+      }
+
+      try {
+        const result = await this.reportsService.getScansCountByEvent(eventId);
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Conteo de escaneos obtenido exitosamente',
+          data: result,
+        };
+      } catch (serviceError: any) {
+        console.error('Error en getScansCountByEvent:', {
+          message: serviceError.message,
+          stack: serviceError.stack,
+        });
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al obtener conteo de escaneos',
+          error: serviceError.name || 'SERVICE_ERROR',
+          data: { eventId, scansCount: 0 }, // Retornar valor seguro
+        };
+      }
+    } catch (error: any) {
+      console.error('Error inesperado en getScansCountByEvent:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al obtener conteo de escaneos',
+        error: error?.message || 'UNKNOWN_ERROR',
+        data: { eventId: eventId || 'unknown', scansCount: 0 }, // Retornar valor seguro
+      };
+    }
+  }
+
+  @Get('scans')
+  async getTotalScansCount(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      
+      try {
+        this.ensureAdmin(claims);
+      } catch (authError: any) {
+        console.error('Error de autorización:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Admin',
+          error: 'FORBIDDEN',
+        };
+      }
+
+      try {
+        const result = await this.reportsService.getTotalScansCount();
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Conteo total de escaneos obtenido exitosamente',
+          data: result,
+        };
+      } catch (serviceError: any) {
+        console.error('Error en getTotalScansCount:', {
+          message: serviceError.message,
+          stack: serviceError.stack,
+        });
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al obtener conteo total de escaneos',
+          error: serviceError.name || 'SERVICE_ERROR',
+          data: { totalScans: 0 }, // Retornar valor seguro
+        };
+      }
+    } catch (error: any) {
+      console.error('Error inesperado en getTotalScansCount:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al obtener conteo total de escaneos',
+        error: error?.message || 'UNKNOWN_ERROR',
+        data: { totalScans: 0 }, // Retornar valor seguro
+      };
+    }
+  }
 }

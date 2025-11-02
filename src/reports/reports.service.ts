@@ -305,4 +305,44 @@ export class ReportsService {
       );
     }
   }
+
+  /**
+   * Obtiene el conteo de tickets escaneados por evento
+   * Método nuevo que no afecta la lógica existente
+   */
+  async getScansCountByEvent(eventId: string): Promise<{ eventId: string; scansCount: number }> {
+    try {
+      const scansCount = await this.ticketsService.getScansCountByEvent(eventId);
+      return {
+        eventId,
+        scansCount,
+      };
+    } catch (error) {
+      console.error('Error al obtener conteo de escaneos por evento:', error);
+      // Retornar 0 si hay error para no romper nada
+      return {
+        eventId,
+        scansCount: 0,
+      };
+    }
+  }
+
+  /**
+   * Obtiene el conteo total de tickets escaneados
+   * Método nuevo que no afecta la lógica existente
+   */
+  async getTotalScansCount(): Promise<{ totalScans: number }> {
+    try {
+      const totalScans = await this.ticketsService.getTotalScansCount();
+      return {
+        totalScans,
+      };
+    } catch (error) {
+      console.error('Error al obtener conteo total de escaneos:', error);
+      // Retornar 0 si hay error para no romper nada
+      return {
+        totalScans: 0,
+      };
+    }
+  }
 }

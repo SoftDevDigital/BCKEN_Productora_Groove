@@ -214,13 +214,26 @@ export class SalesService {
           sale.Item.batchId,
           sale.Item.quantity,
         );
-        console.log('Creando tickets para venta:', saleId);
+        
+        // Obtener batch para verificar si es VIP
+        console.log('Obteniendo tanda para verificar VIP:', {
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+        });
+        const batch = await this.batchesService.findOne(
+          sale.Item.eventId,
+          sale.Item.batchId,
+        );
+        const isVip = batch?.isVip || false;
+        
+        console.log('Creando tickets para venta:', { saleId, isVip });
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
+          isVip,
         });
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
         console.log('Actualizando tickets de usuario:', {
@@ -237,14 +250,6 @@ export class SalesService {
         const user = await this.usersService.getUserProfile(sale.Item.userId);
         console.log('Obteniendo evento:', sale.Item.eventId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
-        console.log('Obteniendo tanda:', {
-          eventId: sale.Item.eventId,
-          batchId: sale.Item.batchId,
-        });
-        const batch = await this.batchesService.findOne(
-          sale.Item.eventId,
-          sale.Item.batchId,
-        );
         const qrAttachments = await Promise.all(
           tickets.map(async (ticket, index) => {
             try {
@@ -608,17 +613,36 @@ Equipo Groove Tickets
         );
       }
 
-      // 2. Crear tickets
+      // 2. Obtener batch para verificar si es VIP (también se usa para el email)
+      let isVip = false;
+      let batch;
+      try {
+        console.log('Obteniendo tanda para verificar VIP (venta gratis):', {
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+        });
+        batch = await this.batchesService.findOne(
+          sale.Item.eventId,
+          sale.Item.batchId,
+        );
+        isVip = batch?.isVip || false;
+      } catch (batchError: any) {
+        console.error('Error al obtener batch, asumiendo no VIP:', batchError.message);
+        batch = { name: 'Tanda' }; // Valor por defecto para el email
+      }
+
+      // 3. Crear tickets
       let tickets;
       let ticketIds: string[] = [];
       try {
-        console.log('Creando tickets para venta gratis:', saleId);
+        console.log('Creando tickets para venta gratis:', { saleId, isVip });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
+          isVip,
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
       } catch (ticketsError: any) {
@@ -629,7 +653,7 @@ Equipo Groove Tickets
         );
       }
 
-      // 3. Actualizar tickets del usuario
+      // 4. Actualizar tickets del usuario
       try {
         console.log('Actualizando tickets de usuario:', {
           userId: sale.Item.userId,
@@ -647,24 +671,21 @@ Equipo Groove Tickets
         console.warn('La venta y tickets se crearon, pero falló la actualización de contadores');
       }
 
-      // 4. Obtener datos para el email
-      let user, event, batch;
+      // 5. Obtener datos para el email
+      let user, event;
       try {
         user = await this.usersService.getUserProfile(sale.Item.userId);
         event = await this.eventsService.findOne(sale.Item.eventId);
-        batch = await this.batchesService.findOne(
-          sale.Item.eventId,
-          sale.Item.batchId,
-        );
+        // batch ya fue obtenido arriba, reutilizarlo
       } catch (dataError: any) {
         console.error('Error al obtener datos para el email:', dataError.message);
         // Continuar con valores por defecto
-        user = { email: '', alias: 'Usuario' };
-        event = { name: 'Evento' };
-        batch = { name: 'Tanda' };
+        if (!user) user = { email: '', alias: 'Usuario' };
+        if (!event) event = { name: 'Evento' };
+        if (!batch) batch = { name: 'Tanda' };
       }
 
-      // 5. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+      // 6. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
       const qrAttachments: any[] = [];
       await Promise.all(
         tickets.map(async (ticket, index) => {
