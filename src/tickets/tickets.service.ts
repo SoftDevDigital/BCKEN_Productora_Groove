@@ -5,12 +5,14 @@ import {
   PutCommand,
   GetCommand,
   UpdateCommand,
+  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { nanoid } from 'nanoid';
 import * as QRCode from 'qrcode';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import { createCanvas, loadImage } from 'canvas';
 
 @Injectable()
 export class TicketsService {
@@ -35,6 +37,7 @@ export class TicketsService {
     eventId: string;
     batchId: string;
     quantity: number;
+    isVip?: boolean;
   }) {
     const tickets: Array<{
       ticketId: string;
@@ -46,8 +49,29 @@ export class TicketsService {
     for (let i = 0; i < sale.quantity; i++) {
       const ticketId = nanoid(6);
       const qrData = `ticketId:${ticketId}`;
-      const qrImageBuffer = await QRCode.toBuffer(qrData, { type: 'png' });
-      const qrKey = `qrs/ticket-${ticketId}-${uuidv4()}.png`;
+      
+      let qrImageBuffer: Buffer;
+      
+      if (sale.isVip) {
+        // Generar QR VIP con diseño personalizado
+        qrImageBuffer = await this.generateVipQr(qrData);
+      } else {
+        // QR normal
+        qrImageBuffer = await QRCode.toBuffer(qrData, { 
+          type: 'png',
+          width: 512,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF',
+          },
+        });
+      }
+      
+      const qrKey = sale.isVip 
+        ? `qrs/vip/ticket-${ticketId}-${uuidv4()}.png`
+        : `qrs/ticket-${ticketId}-${uuidv4()}.png`;
+      
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -66,6 +90,7 @@ export class TicketsService {
           eventId: sale.eventId,
           batchId: sale.batchId,
           status: 'active',
+          isVip: sale.isVip || false,
           qrS3Url,
           createdAt: new Date().toISOString(),
         },
@@ -74,6 +99,116 @@ export class TicketsService {
       tickets.push({ ticketId, saleId: sale.id, qrS3Url });
     }
     return tickets;
+  }
+
+  private async generateVipQr(qrData: string): Promise<Buffer> {
+    try {
+      // Generar QR base con colores dorado y negro
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: 600,
+        margin: 2,
+        color: {
+          dark: '#000000', // Negro para el QR
+          light: '#FFFFFF', // Blanco de fondo
+        },
+        errorCorrectionLevel: 'H', // Alto nivel de corrección
+      });
+
+      // Crear canvas para agregar diseño VIP
+      const padding = 40;
+      const vipTextHeight = 50;
+      const borderWidth = 6;
+      const canvasWidth = 600 + (padding * 2);
+      const canvasHeight = 600 + (padding * 2) + vipTextHeight;
+
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Fondo degradado dorado
+      const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
+      gradient.addColorStop(0, '#FFD700'); // Dorado
+      gradient.addColorStop(0.5, '#FFA500'); // Naranja dorado
+      gradient.addColorStop(1, '#FFD700'); // Dorado
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // Borde decorativo externo
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = borderWidth;
+      ctx.strokeRect(
+        borderWidth / 2,
+        borderWidth / 2,
+        canvasWidth - borderWidth,
+        canvasHeight - borderWidth,
+      );
+
+      // Borde interno dorado
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(
+        borderWidth + 5,
+        borderWidth + 5,
+        canvasWidth - (borderWidth * 2) - 10,
+        canvasHeight - (borderWidth * 2) - 10,
+      );
+
+      // Cargar QR como imagen
+      const qrImage = await loadImage(qrBuffer);
+      
+      // Agregar QR en el centro
+      const qrX = padding;
+      const qrY = padding;
+      ctx.drawImage(qrImage, qrX, qrY, 600, 600);
+
+      // Agregar texto "VIP" arriba del QR
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 48px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Sombra del texto
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
+      
+      ctx.fillText('VIP', canvasWidth / 2, padding / 2);
+      
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Agregar texto "VIP" abajo del QR con diseño decorativo
+      const bottomTextY = padding + 600 + (vipTextHeight / 2);
+      
+      // Fondo para el texto inferior
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(
+        padding + 100,
+        bottomTextY - 25,
+        400,
+        50,
+      );
+      
+      // Texto VIP inferior
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 36px Arial';
+      ctx.fillText('VIP TICKET', canvasWidth / 2, bottomTextY);
+
+      // Convertir canvas a buffer
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR VIP, usando QR normal:', error);
+      // Fallback a QR normal si hay error
+      return await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: 512,
+        margin: 2,
+      });
+    }
   }
 
   async validateTicket(ticketId: string) {
@@ -106,6 +241,7 @@ export class TicketsService {
       ticketId: string;
       status: 'valid' | 'invalid';
       message: string;
+      isVip?: boolean;
       ticket?: any;
     }> = [];
     const scanRecords: Array<{
@@ -134,16 +270,30 @@ export class TicketsService {
           }),
         );
         const scanId = nanoid(10);
-        scanRecords.push({
+        // Agregar eventId al registro de escaneo para poder contar por evento
+        // Mantener compatibilidad: eventId es opcional
+        const scanRecord: any = {
           id: scanId,
           ticketId,
           status: 'valid',
           scannedAt: new Date().toISOString(),
-        });
+        };
+        // Solo agregar eventId si el ticket lo tiene (siempre debería tenerlo)
+        // Manejo seguro para evitar errores si eventId no existe
+        try {
+          if (ticket && ticket.eventId) {
+            scanRecord.eventId = ticket.eventId;
+          }
+        } catch (eventIdError: any) {
+          console.error(`Error al obtener eventId del ticket ${ticketId}:`, eventIdError.message);
+          // Continuar sin eventId, no es crítico para el escaneo
+        }
+        scanRecords.push(scanRecord);
         results.push({
           ticketId,
           status: 'valid',
           message: 'Ticket válido y marcado como usado',
+          isVip: ticket.isVip || false, // Agregar propiedad isVip para el frontend
           ticket: {
             ticketId: ticket.id,
             saleId: ticket.saleId,
@@ -152,6 +302,7 @@ export class TicketsService {
             batchId: ticket.batchId,
             status: 'used',
             qrS3Url: ticket.qrS3Url,
+            isVip: ticket.isVip || false,
           },
         });
       } catch (error) {
@@ -170,15 +321,75 @@ export class TicketsService {
       }
     }
 
+    // Guardar escaneos con manejo de errores individual para que no se detenga el proceso
     for (const scan of scanRecords) {
-      await this.docClient.send(
-        new PutCommand({
-          TableName: this.scansTableName,
-          Item: scan,
-        }),
-      );
+      try {
+        await this.docClient.send(
+          new PutCommand({
+            TableName: this.scansTableName,
+            Item: scan,
+          }),
+        );
+      } catch (scanSaveError: any) {
+        console.error(`Error al guardar escaneo para ticket ${scan.ticketId}:`, scanSaveError.message);
+        // Continuar con los demás escaneos aunque falle uno
+        // No lanzar error para no romper el flujo
+      }
     }
 
     return results;
+  }
+
+  /**
+   * Obtiene el conteo de tickets escaneados (válidos) por evento
+   * Método nuevo que no afecta la lógica existente
+   */
+  async getScansCountByEvent(eventId: string): Promise<number> {
+    try {
+      const result = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.scansTableName,
+          FilterExpression: 'eventId = :eventId AND #status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':eventId': eventId,
+            ':status': 'valid',
+          },
+        }),
+      );
+      return (result.Items || []).length;
+    } catch (error) {
+      console.error('Error al contar escaneos por evento:', error);
+      // Retornar 0 si hay error para no romper nada
+      return 0;
+    }
+  }
+
+  /**
+   * Obtiene el conteo total de tickets escaneados (válidos) para todos los eventos
+   * Método nuevo que no afecta la lógica existente
+   */
+  async getTotalScansCount(): Promise<number> {
+    try {
+      const result = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.scansTableName,
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':status': 'valid',
+          },
+        }),
+      );
+      return (result.Items || []).length;
+    } catch (error) {
+      console.error('Error al contar total de escaneos:', error);
+      // Retornar 0 si hay error para no romper nada
+      return 0;
+    }
   }
 }

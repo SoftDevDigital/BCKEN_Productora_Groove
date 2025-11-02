@@ -96,31 +96,61 @@ export class TicketsController {
   ) {
     try {
       const claims = this.getClaims(req);
-      this.ensureAdmin(claims);
-      if (
-        !body.ticketIds ||
-        !Array.isArray(body.ticketIds) ||
-        body.ticketIds.length === 0
-      ) {
-        throw new HttpException(
-          'Se requiere una lista de ticketIds',
-          HttpStatus.BAD_REQUEST,
-        );
+      
+      try {
+        this.ensureAdmin(claims);
+      } catch (authError: any) {
+        console.error('Error de autorización:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Admin',
+          error: 'FORBIDDEN',
+        };
       }
-      const results = await this.ticketsService.scanTickets(body.ticketIds);
+
+      try {
+        if (
+          !body.ticketIds ||
+          !Array.isArray(body.ticketIds) ||
+          body.ticketIds.length === 0
+        ) {
+          return {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Se requiere una lista de ticketIds',
+            error: 'BAD_REQUEST',
+          };
+        }
+
+        const results = await this.ticketsService.scanTickets(body.ticketIds);
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Tickets escaneados',
+          data: results,
+        };
+      } catch (serviceError: any) {
+        console.error('Error en scanTickets:', {
+          message: serviceError.message,
+          stack: serviceError.stack,
+        });
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al escanear tickets',
+          error: serviceError.name || 'SERVICE_ERROR',
+          data: [], // Retornar array vacío seguro
+        };
+      }
+    } catch (error: any) {
+      console.error('Error inesperado en scanTickets:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
       return {
-        statusCode: HttpStatus.OK,
-        message: 'Tickets escaneados',
-        data: results,
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al escanear tickets',
+        error: error?.message || 'UNKNOWN_ERROR',
+        data: [], // Retornar array vacío seguro
       };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException(
-        'Error al escanear tickets',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     }
   }
 }
