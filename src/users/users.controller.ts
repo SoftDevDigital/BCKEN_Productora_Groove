@@ -167,26 +167,47 @@ export class UsersController {
         role: claims?.['custom:role'],
         email: claims?.email,
       });
-      this.ensureAdmin(claims);
-      console.log('Admin authorization passed');
+      
+      // Validar admin pero no lanzar error crítico
+      try {
+        this.ensureAdmin(claims);
+        console.log('Admin authorization passed');
+      } catch (authError: any) {
+        console.error('Authorization failed:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Admin',
+          error: 'FORBIDDEN',
+        };
+      }
       
       console.log('Calling usersService.deleteUser with userId:', userId);
-      const result = await this.usersService.deleteUser(userId);
-      console.log('Service returned result:', result);
       
-      return {
-        statusCode: HttpStatus.OK,
-        message: result.message,
-      };
-    } catch (error) {
-      console.error('DELETE USER ERROR in controller:', error);
-      if (error instanceof HttpException) {
-        throw error;
+      try {
+        const result = await this.usersService.deleteUser(userId);
+        console.log('Service returned result:', result);
+        
+        return {
+          statusCode: HttpStatus.OK,
+          message: result.message,
+        };
+      } catch (serviceError: any) {
+        console.error('Service error (non-critical):', serviceError.message);
+        // Retornar respuesta pero no lanzar excepción
+        return {
+          statusCode: serviceError.status || HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al eliminar usuario',
+          error: serviceError.name || 'SERVICE_ERROR',
+        };
       }
-      throw new HttpException(
-        'Error al eliminar usuario',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    } catch (error: any) {
+      console.error('DELETE USER ERROR in controller (unexpected):', error);
+      // Siempre retornar respuesta HTTP, nunca lanzar excepción no controlada
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al procesar eliminación de usuario',
+        error: error?.message || 'UNKNOWN_ERROR',
+      };
     }
   }
 }

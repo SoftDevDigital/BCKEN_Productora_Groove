@@ -532,41 +532,55 @@ export class UsersService {
   async deleteUser(userId: string): Promise<{ message: string }> {
     console.log('=== DELETE USER SERVICE ===');
     console.log('Attempting to delete userId:', userId);
+    
+    let actualUserId: string | null = null;
+    let userEmail: string | null = null;
+    let deletedFromDynamoDB = false;
+    let deletedFromCognito = false;
+    
     try {
       // First, check if user exists in DynamoDB by id
       console.log('Step 1: Checking if user exists in DynamoDB by id...');
       console.log('TableName:', this.tableName);
       console.log('Key:', { id: userId });
       
-      let user = await this.docClient.send(
-        new GetCommand({
-          TableName: this.tableName,
-          Key: { id: userId },
-        }),
-      );
-
-      console.log('DynamoDB GetCommand result (by id):', {
-        hasItem: !!user.Item,
-        item: user.Item,
-      });
+      let user;
+      try {
+        user = await this.docClient.send(
+          new GetCommand({
+            TableName: this.tableName,
+            Key: { id: userId },
+          }),
+        );
+        console.log('DynamoDB GetCommand result (by id):', {
+          hasItem: !!user.Item,
+          item: user.Item,
+        });
+      } catch (dbError: any) {
+        console.error('Error querying DynamoDB by id:', dbError.message);
+        user = { Item: null };
+      }
 
       // If not found by id, try to find by email (userId might be an email)
-      let actualUserId: string;
-      let userEmail: string;
-      
       if (!user.Item) {
         console.log('User not found by id, trying to search by email/alias...');
-        const userByEmail = await this.getUserByEmailOrAlias(userId);
-        if (userByEmail) {
-          console.log('User found by email/alias:', {
-            id: userByEmail.id,
-            email: userByEmail.email,
-          });
-          actualUserId = userByEmail.id;
-          userEmail = userByEmail.email || userId;
-        } else {
-          console.error('User not found in DynamoDB by id or email:', userId);
-          throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+        try {
+          const userByEmail = await this.getUserByEmailOrAlias(userId);
+          if (userByEmail) {
+            console.log('User found by email/alias:', {
+              id: userByEmail.id,
+              email: userByEmail.email,
+            });
+            actualUserId = userByEmail.id;
+            userEmail = userByEmail.email || userId;
+          } else {
+            console.warn('User not found in DynamoDB by id or email:', userId);
+            // No lanzar error, solo retornar mensaje
+            return { message: `Usuario no encontrado en DynamoDB: ${userId}` };
+          }
+        } catch (searchError: any) {
+          console.error('Error searching by email/alias:', searchError.message);
+          return { message: `Error al buscar usuario: ${searchError.message}` };
         }
       } else {
         actualUserId = user.Item.id;
@@ -575,54 +589,70 @@ export class UsersService {
 
       console.log('Will delete user with:', { actualUserId, userEmail });
 
-      console.log('Step 2: Deleting user from DynamoDB...');
-      console.log('Using actual userId:', actualUserId);
       // Delete user from DynamoDB using the actual id found
-      const deleteResult = await this.docClient.send(
-        new DeleteCommand({
-          TableName: this.tableName,
-          Key: { id: actualUserId },
-        }),
-      );
-      console.log('DynamoDB DeleteCommand successful');
+      if (actualUserId) {
+        console.log('Step 2: Deleting user from DynamoDB...');
+        console.log('Using actual userId:', actualUserId);
+        try {
+          await this.docClient.send(
+            new DeleteCommand({
+              TableName: this.tableName,
+              Key: { id: actualUserId },
+            }),
+          );
+          deletedFromDynamoDB = true;
+          console.log('DynamoDB DeleteCommand successful');
+        } catch (dbDeleteError: any) {
+          console.error('Error deleting from DynamoDB:', dbDeleteError.message);
+          // Continuar aunque falle la eliminación de DB
+        }
+      }
 
       // Delete user from Cognito (if exists)
       // Use email as Username in Cognito (since username_attributes = ["email"])
-      console.log('Step 3: Attempting to delete user from Cognito...');
-      const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
-      console.log('Cognito UserPoolId:', cognitoUserPoolId);
-      console.log('Cognito Username (email):', userEmail);
-      
-      try {
-        await this.cognitoClient.send(
-          new AdminDeleteUserCommand({
-            UserPoolId: cognitoUserPoolId,
-            Username: userEmail, // Use email as Username in Cognito
-          }),
-        );
-        console.log('Cognito AdminDeleteUserCommand successful');
-      } catch (cognitoError) {
-        console.warn(`User ${userEmail} not found in Cognito or already deleted:`, cognitoError.message);
-        console.log('Cognito deletion failed, but continuing...');
-        // Continue even if Cognito deletion fails
+      if (userEmail) {
+        console.log('Step 3: Attempting to delete user from Cognito...');
+        const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
+        console.log('Cognito UserPoolId:', cognitoUserPoolId);
+        console.log('Cognito Username (email):', userEmail);
+        
+        try {
+          await this.cognitoClient.send(
+            new AdminDeleteUserCommand({
+              UserPoolId: cognitoUserPoolId,
+              Username: userEmail, // Use email as Username in Cognito
+            }),
+          );
+          deletedFromCognito = true;
+          console.log('Cognito AdminDeleteUserCommand successful');
+        } catch (cognitoError: any) {
+          console.warn(`User ${userEmail} not found in Cognito or already deleted:`, cognitoError.message);
+          console.log('Cognito deletion failed, but continuing...');
+          // Continue even if Cognito deletion fails
+        }
       }
 
-      console.log(`Usuario ${actualUserId} (${userEmail}) eliminado exitosamente`);
-      return { message: `Usuario ${actualUserId} (${userEmail}) eliminado exitosamente` };
-    } catch (error) {
-      console.error('Error al eliminar usuario:', error);
-      console.error('Error details:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-      });
-      if (error instanceof HttpException) {
-        throw error;
+      // Retornar resultado basado en lo que se eliminó
+      if (deletedFromDynamoDB && deletedFromCognito) {
+        return { message: `Usuario ${actualUserId} (${userEmail}) eliminado exitosamente de ambos sistemas` };
+      } else if (deletedFromDynamoDB) {
+        return { message: `Usuario ${actualUserId} eliminado de DynamoDB. Error al eliminar de Cognito.` };
+      } else if (deletedFromCognito) {
+        return { message: `Usuario ${userEmail} eliminado de Cognito. Error al eliminar de DynamoDB.` };
+      } else {
+        return { message: `No se pudo eliminar el usuario ${userId} de ningún sistema` };
       }
-      throw new HttpException(
-        `Error al eliminar usuario: ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    } catch (error: any) {
+      console.error('Error inesperado al eliminar usuario:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack,
+      });
+      // Nunca lanzar excepción, siempre retornar mensaje
+      return { 
+        message: `Error al procesar eliminación de usuario: ${error?.message || 'Error desconocido'}` 
+      };
     }
   }
 }

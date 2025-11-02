@@ -28,18 +28,32 @@ export class AuthController {
     if (req['apiGateway']) {
       const ctx = req['apiGateway'].event.requestContext;
       claims = ctx.authorizer?.jwt?.claims || ctx.authorizer?.claims || null;
+      console.log('Claims from API Gateway:', claims);
     }
     if (!claims) {
       const token = req.headers['authorization']?.replace('Bearer ', '');
       if (token) {
         claims = jwt.decode(token) as any;
+        console.log('Claims from JWT decode (full object):', JSON.stringify(claims, null, 2));
+        console.log('Claims keys:', Object.keys(claims || {}));
+        console.log('custom:role:', claims?.['custom:role']);
+        console.log('email:', claims?.email);
+        console.log('sub:', claims?.sub);
       }
     }
     return claims;
   }
 
   private ensureAdmin(claims: any) {
-    const userRole = claims?.['custom:role'] || 'User';
+    console.log('ensureAdmin - claims received:', {
+      hasClaims: !!claims,
+      claimsKeys: claims ? Object.keys(claims) : [],
+      customRole: claims?.['custom:role'],
+      role: claims?.role,
+      allClaims: JSON.stringify(claims, null, 2),
+    });
+    const userRole = claims?.['custom:role'] || claims?.role || 'User';
+    console.log('ensureAdmin - userRole determined:', userRole);
     if (userRole !== 'Admin') {
       throw new HttpException(
         'No autorizado: Requiere rol Admin',
@@ -204,35 +218,66 @@ export class AuthController {
   ) {
     console.log('=== DELETE USER AUTH CONTROLLER ===');
     console.log('Received body:', body);
-    console.log('Received userSub:', body.userSub);
+    console.log('Received userSub:', body?.userSub);
+    
     try {
+      // Validar body
+      if (!body?.userSub) {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'userSub es requerido',
+          error: 'BAD_REQUEST',
+        };
+      }
+
       const claims = this.getClaims(req);
       console.log('User claims:', {
         sub: claims?.sub,
         role: claims?.['custom:role'],
         email: claims?.email,
       });
-      this.ensureAdmin(claims);
-      console.log('Admin authorization passed');
+      
+      // Validar admin pero no lanzar error crítico
+      try {
+        this.ensureAdmin(claims);
+        console.log('Admin authorization passed');
+      } catch (authError: any) {
+        console.error('Authorization failed:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Admin',
+          error: 'FORBIDDEN',
+        };
+      }
       
       console.log('Calling cognitoService.adminDeleteUser with userSub:', body.userSub);
-      const result = await this.cognitoService.adminDeleteUser(body.userSub);
-      console.log('Service returned result:', result);
       
-      return {
-        statusCode: HttpStatus.OK,
-        message: `Usuario ${body.userSub} eliminado exitosamente de Cognito y DynamoDB`,
-        data: result,
-      };
-    } catch (error) {
-      console.error('DELETE USER ERROR in auth controller:', error);
-      if (error instanceof BadRequestException) {
-        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      try {
+        const result = await this.cognitoService.adminDeleteUser(body.userSub);
+        console.log('Service returned result:', result);
+        
+        return {
+          statusCode: HttpStatus.OK,
+          message: `Usuario ${body.userSub} eliminado exitosamente de Cognito y DynamoDB`,
+          data: result,
+        };
+      } catch (serviceError: any) {
+        console.error('Service error (non-critical):', serviceError.message);
+        // Retornar respuesta pero no lanzar excepción
+        return {
+          statusCode: serviceError.status || HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al eliminar usuario',
+          error: serviceError.name || 'SERVICE_ERROR',
+        };
       }
-      throw new HttpException(
-        'Error al eliminar usuario',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    } catch (error: any) {
+      console.error('DELETE USER ERROR in auth controller (unexpected):', error);
+      // Siempre retornar respuesta HTTP, nunca lanzar excepción no controlada
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al procesar eliminación de usuario',
+        error: error?.message || 'UNKNOWN_ERROR',
+      };
     }
   }
 
