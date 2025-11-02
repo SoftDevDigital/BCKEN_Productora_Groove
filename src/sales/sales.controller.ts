@@ -47,7 +47,7 @@ export class SalesController {
   }
 
   private ensureReseller(claims: any) {
-    const userRole = claims?.['custom:role'] || 'User';
+    const userRole = claims?.['custom:role'] || claims?.role || 'User';
     if (userRole !== 'Reseller') {
       throw new HttpException(
         'No autorizado: Requiere rol Reseller',
@@ -152,27 +152,52 @@ export class SalesController {
   async createFreeTicket(@Body() dto: CreateFreeSaleDto, @Req() req: Request) {
     try {
       const claims = this.getClaims(req);
-      this.ensureReseller(claims);
       
-      const sale = await this.salesService.createFreeSale(
-        dto,
-        claims['sub'],
-        claims['email'] || claims['cognito:username'],
-      );
-      
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'Ticket gratis generado exitosamente',
-        data: sale,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
+      try {
+        this.ensureReseller(claims);
+      } catch (authError: any) {
+        console.error('Error de autorización:', authError.message);
+        return {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: authError.message || 'No autorizado: Requiere rol Reseller',
+          error: 'FORBIDDEN',
+        };
       }
-      throw new HttpException(
-        'Error al generar ticket gratis',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      
+      try {
+        const sale = await this.salesService.createFreeSale(
+          dto,
+          claims['sub'],
+          claims['email'] || claims['cognito:username'],
+        );
+        
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Ticket gratis generado exitosamente',
+          data: sale,
+        };
+      } catch (serviceError: any) {
+        console.error('Error en createFreeSale:', {
+          message: serviceError.message,
+          stack: serviceError.stack,
+        });
+        return {
+          statusCode: serviceError.statusCode || serviceError.status || HttpStatus.INTERNAL_SERVER_ERROR,
+          message: serviceError.message || 'Error al generar ticket gratis',
+          error: serviceError.name || 'SERVICE_ERROR',
+        };
+      }
+    } catch (error: any) {
+      console.error('Error inesperado en createFreeTicket:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      });
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error inesperado al procesar solicitud de ticket gratis',
+        error: error?.message || 'UNKNOWN_ERROR',
+      };
     }
   }
 

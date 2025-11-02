@@ -403,70 +403,144 @@ Equipo Groove Tickets
     const saleId = uuidv4();
     const { eventId, batchId, quantity, buyerEmailOrAlias } = createFreeSaleDto;
 
-    // 1. Validar que el usuario comprador existe
-    const buyer = await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
-    if (!buyer) {
-      throw new HttpException(
-        'El email o alias del comprador no está registrado',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // 2. Validar evento y batch
-    const event = await this.eventsService.findOne(eventId);
-    if (!event) {
-      throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
-    }
-
-    const batch = await this.batchesService.findOne(eventId, batchId);
-    if (!batch || batch.availableTickets < quantity) {
-      throw new HttpException(
-        'No hay suficientes tickets disponibles en la tanda',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // 3. Validar límite del 25% de tickets gratis
-    const totalEventTickets = await this.getTotalEventTickets(eventId);
-    const freeTicketsCount = await this.getFreeTicketsCount(eventId);
-    const maxFreeTickets = Math.floor(totalEventTickets * 0.25);
-    const freeTicketsAfterThis = freeTicketsCount + quantity;
-
-    if (freeTicketsAfterThis > maxFreeTickets) {
-      throw new HttpException(
-        `No se pueden generar más tickets gratis. Límite del 25% alcanzado (${freeTicketsCount}/${maxFreeTickets} tickets gratis ya generados). Puedes generar hasta ${maxFreeTickets - freeTicketsCount} tickets más.`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // 4. Crear la venta con status 'approved' y isFree: true
-    const basePrice = batch.price || 0;
-    const params: PutCommandInput = {
-      TableName: this.tableName,
-      Item: {
-        id: saleId,
-        userId: buyer.id,
-        resellerId: resellerId,
-        eventId,
-        batchId,
-        quantity,
-        type: 'reseller',
-        basePrice,
-        commission: 0,
-        total: 0, // Total es 0 porque es gratis
-        status: 'approved', // Aprobado inmediatamente (sin pago)
-        isFree: true, // Marcar como gratis
-        createdAt: new Date().toISOString(),
-      },
-    };
-
     try {
-      await this.docClient.send(new PutCommand(params));
-      
-      // 5. Confirmar la venta gratis (genera tickets, envía email, etc.)
-      await this.confirmFreeSale(saleId, resellerEmail);
+      // 1. Validar que el usuario comprador existe
+      let buyer;
+      try {
+        buyer = await this.usersService.getUserByEmailOrAlias(buyerEmailOrAlias);
+        if (!buyer) {
+          throw new HttpException(
+            'El email o alias del comprador no está registrado',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      } catch (buyerError: any) {
+        console.error('Error al buscar usuario comprador:', buyerError.message);
+        if (buyerError instanceof HttpException) {
+          throw buyerError;
+        }
+        throw new HttpException(
+          'Error al buscar el usuario comprador',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-      console.log('Venta gratis creada:', { saleId, buyerId: buyer.id, resellerId });
+      // 2. Validar evento y batch
+      let event;
+      try {
+        event = await this.eventsService.findOne(eventId);
+        if (!event) {
+          throw new HttpException('Evento no encontrado', HttpStatus.NOT_FOUND);
+        }
+      } catch (eventError: any) {
+        console.error('Error al buscar evento:', eventError.message);
+        if (eventError instanceof HttpException) {
+          throw eventError;
+        }
+        throw new HttpException(
+          'Error al buscar el evento',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      let batch;
+      try {
+        batch = await this.batchesService.findOne(eventId, batchId);
+        if (!batch || batch.availableTickets < quantity) {
+          throw new HttpException(
+            'No hay suficientes tickets disponibles en la tanda',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      } catch (batchError: any) {
+        console.error('Error al buscar batch:', batchError.message);
+        if (batchError instanceof HttpException) {
+          throw batchError;
+        }
+        throw new HttpException(
+          'Error al buscar la tanda',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // 3. Validar límite del 25% de tickets gratis
+      let totalEventTickets = 0;
+      let freeTicketsCount = 0;
+      try {
+        totalEventTickets = await this.getTotalEventTickets(eventId);
+        freeTicketsCount = await this.getFreeTicketsCount(eventId);
+        const maxFreeTickets = Math.floor(totalEventTickets * 0.25);
+        const freeTicketsAfterThis = freeTicketsCount + quantity;
+
+        if (freeTicketsAfterThis > maxFreeTickets) {
+          throw new HttpException(
+            `No se pueden generar más tickets gratis. Límite del 25% alcanzado (${freeTicketsCount}/${maxFreeTickets} tickets gratis ya generados). Puedes generar hasta ${maxFreeTickets - freeTicketsCount} tickets más.`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      } catch (limitError: any) {
+        console.error('Error al validar límite de tickets gratis:', limitError.message);
+        if (limitError instanceof HttpException) {
+          throw limitError;
+        }
+        // Si falla la validación del límite, continuar con advertencia
+        console.warn('No se pudo validar el límite del 25%, continuando...');
+      }
+
+      // 4. Crear la venta con status 'approved' y isFree: true
+      const basePrice = batch.price || 0;
+      const params: PutCommandInput = {
+        TableName: this.tableName,
+        Item: {
+          id: saleId,
+          userId: buyer.id,
+          resellerId: resellerId,
+          eventId,
+          batchId,
+          quantity,
+          type: 'reseller',
+          basePrice,
+          commission: 0,
+          total: 0, // Total es 0 porque es gratis
+          status: 'approved', // Aprobado inmediatamente (sin pago)
+          isFree: true, // Marcar como gratis
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      try {
+        await this.docClient.send(new PutCommand(params));
+        console.log('Venta gratis registrada en DynamoDB:', saleId);
+      } catch (dbError: any) {
+        console.error('Error al registrar venta en DynamoDB:', dbError.message);
+        throw new HttpException(
+          'Error al registrar la venta en la base de datos',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // 5. Confirmar la venta gratis (genera tickets, envía email, etc.)
+      try {
+        await this.confirmFreeSale(saleId, resellerEmail);
+      } catch (confirmError: any) {
+        console.error('Error al confirmar venta gratis:', confirmError.message);
+        // La venta ya está creada, retornamos éxito parcial
+        console.warn('Venta creada pero hubo errores en la confirmación:', saleId);
+        return {
+          id: saleId,
+          eventId,
+          batchId,
+          quantity,
+          type: 'reseller',
+          basePrice,
+          total: 0,
+          status: 'approved',
+          isFree: true,
+          warning: 'Venta creada pero hubo errores en la generación de tickets o envío de email',
+        };
+      }
+
+      console.log('Venta gratis creada exitosamente:', { saleId, buyerId: buyer.id, resellerId });
       return {
         id: saleId,
         eventId,
@@ -478,10 +552,17 @@ Equipo Groove Tickets
         status: 'approved',
         isFree: true,
       };
-    } catch (error) {
-      console.error('Error al registrar la venta gratis:', error);
+    } catch (error: any) {
+      console.error('Error en createFreeSale:', {
+        message: error.message,
+        stack: error.stack,
+        saleId,
+      });
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
-        `Error al registrar la venta gratis: ${error.message}`,
+        `Error al procesar venta gratis: ${error?.message || 'Error desconocido'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -508,51 +589,84 @@ Equipo Groove Tickets
 
     try {
       // 1. Decrementar tickets del batch
-      console.log('Decrementando tickets para venta gratis:', {
-        eventId: sale.Item.eventId,
-        batchId: sale.Item.batchId,
-        quantity: sale.Item.quantity,
-      });
-      await this.batchesService.decrementTickets(
-        sale.Item.eventId,
-        sale.Item.batchId,
-        sale.Item.quantity,
-      );
+      try {
+        console.log('Decrementando tickets para venta gratis:', {
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+          quantity: sale.Item.quantity,
+        });
+        await this.batchesService.decrementTickets(
+          sale.Item.eventId,
+          sale.Item.batchId,
+          sale.Item.quantity,
+        );
+      } catch (decrementError: any) {
+        console.error('Error al decrementar tickets del batch:', decrementError.message);
+        throw new HttpException(
+          'Error al actualizar el stock de tickets',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
       // 2. Crear tickets
-      console.log('Creando tickets para venta gratis:', saleId);
-      const tickets = await this.ticketsService.createTickets({
-        id: saleId,
-        userId: sale.Item.userId,
-        eventId: sale.Item.eventId,
-        batchId: sale.Item.batchId,
-        quantity: sale.Item.quantity,
-      });
-
-      const ticketIds = tickets.map((ticket) => ticket.ticketId);
+      let tickets;
+      let ticketIds: string[] = [];
+      try {
+        console.log('Creando tickets para venta gratis:', saleId);
+        tickets = await this.ticketsService.createTickets({
+          id: saleId,
+          userId: sale.Item.userId,
+          eventId: sale.Item.eventId,
+          batchId: sale.Item.batchId,
+          quantity: sale.Item.quantity,
+        });
+        ticketIds = tickets.map((ticket) => ticket.ticketId);
+      } catch (ticketsError: any) {
+        console.error('Error al crear tickets:', ticketsError.message);
+        throw new HttpException(
+          'Error al generar los tickets con QR',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
       // 3. Actualizar tickets del usuario
-      console.log('Actualizando tickets de usuario:', {
-        userId: sale.Item.userId,
-        ticketIds,
-        resellerId: sale.Item.resellerId,
-      });
-      await this.usersService.updateUserTickets(
-        sale.Item.userId,
-        ticketIds,
-        sale.Item.resellerId,
-      );
+      try {
+        console.log('Actualizando tickets de usuario:', {
+          userId: sale.Item.userId,
+          ticketIds,
+          resellerId: sale.Item.resellerId,
+        });
+        await this.usersService.updateUserTickets(
+          sale.Item.userId,
+          ticketIds,
+          sale.Item.resellerId,
+        );
+      } catch (updateError: any) {
+        console.error('Error al actualizar tickets del usuario:', updateError.message);
+        // No lanzar error aquí, continuar con el email aunque falle la actualización
+        console.warn('La venta y tickets se crearon, pero falló la actualización de contadores');
+      }
 
       // 4. Obtener datos para el email
-      const user = await this.usersService.getUserProfile(sale.Item.userId);
-      const event = await this.eventsService.findOne(sale.Item.eventId);
-      const batch = await this.batchesService.findOne(
-        sale.Item.eventId,
-        sale.Item.batchId,
-      );
+      let user, event, batch;
+      try {
+        user = await this.usersService.getUserProfile(sale.Item.userId);
+        event = await this.eventsService.findOne(sale.Item.eventId);
+        batch = await this.batchesService.findOne(
+          sale.Item.eventId,
+          sale.Item.batchId,
+        );
+      } catch (dataError: any) {
+        console.error('Error al obtener datos para el email:', dataError.message);
+        // Continuar con valores por defecto
+        user = { email: '', alias: 'Usuario' };
+        event = { name: 'Evento' };
+        batch = { name: 'Tanda' };
+      }
 
-      // 5. Obtener QR attachments
-      const qrAttachments = await Promise.all(
+      // 5. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+      const qrAttachments: any[] = [];
+      await Promise.all(
         tickets.map(async (ticket, index) => {
           try {
             const qrKey = ticket.qrS3Url
@@ -571,25 +685,26 @@ Equipo Groove Tickets
             }
             const body = await s3Response.Body.transformToByteArray();
             const buffer = Buffer.from(body);
-            return {
+            qrAttachments.push({
               content: buffer.toString('base64'),
               filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
               type: 'image/png',
               disposition: 'attachment',
               contentId: `qr-${ticket.ticketId}`,
-            };
-          } catch (error) {
+            });
+          } catch (qrError: any) {
             console.error(
               `Error fetching QR code for ticket ${ticket.ticketId}:`,
-              error,
+              qrError.message,
             );
-            throw new HttpException(
-              `Failed to fetch QR code for ticket ${ticket.ticketId}: ${error.message}`,
-              HttpStatus.INTERNAL_SERVER_ERROR,
-            );
+            // Continuar sin este QR, pero loguear el error
           }
         }),
       );
+      
+      if (qrAttachments.length === 0) {
+        console.warn('No se pudo obtener ningún QR code para adjuntar al email');
+      }
 
       // 6. Obtener nombre del revendedor (simplificado - usar email o intentar desde Cognito)
       let resellerName = resellerEmail;
@@ -611,19 +726,16 @@ Equipo Groove Tickets
         // Si falla, usar el email como fallback (ya está asignado arriba)
       }
 
-      // 7. Enviar email especial para ticket gratis
-      const userName = user.alias || user.email?.split('@')[0] || 'Usuario';
-      const userEmail = user.email;
+      // 7. Enviar email especial para ticket gratis (si falla, no detener todo el proceso)
+      const userName = user?.alias || user?.email?.split('@')[0] || 'Usuario';
+      const userEmail = user?.email;
       
       if (!userEmail) {
-        console.error('Usuario sin email:', { userId: sale.Item.userId, user });
-        throw new HttpException(
-          'No se pudo obtener el email del usuario para enviar el ticket',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      const emailBody = `
+        console.error('Usuario sin email, no se enviará email:', { userId: sale.Item.userId, user });
+        // No lanzar error, solo loguear - los tickets ya están creados
+      } else {
+        try {
+          const emailBody = `
 Hola ${userName},
 
 ¡Tienes un ticket gratuito!
@@ -643,28 +755,36 @@ Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Disfruta del evento!
 
 Equipo Groove Tickets
-      `;
+          `;
 
-      console.log('Enviando email de ticket gratis a:', userEmail);
-      await this.emailService.sendConfirmationEmail(
-        userEmail,
-        `Ticket Gratuito - ${event?.name || 'Evento'}`,
-        emailBody,
-        qrAttachments,
-      );
-      console.log('Email de ticket gratis enviado exitosamente');
+          console.log('Enviando email de ticket gratis a:', userEmail);
+          await this.emailService.sendConfirmationEmail(
+            userEmail,
+            `Ticket Gratuito - ${event?.name || 'Evento'}`,
+            emailBody,
+            qrAttachments,
+          );
+          console.log('Email de ticket gratis enviado exitosamente');
+        } catch (emailError: any) {
+          console.error('Error al enviar email de ticket gratis:', emailError.message);
+          // No lanzar error - los tickets ya están creados y el usuario puede verlos en su cuenta
+          console.warn('Los tickets fueron creados pero el email no se pudo enviar');
+        }
+      }
 
       return { ...sale.Item, tickets };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error en confirmFreeSale:', {
         saleId,
-        error: error.message,
+        error: error?.message,
+        stack: error?.stack,
       });
+      // Re-lanzar el error para que createFreeSale pueda manejarlo
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
-        `Error al confirmar la venta gratis: ${error.message}`,
+        `Error al confirmar la venta gratis: ${error?.message || 'Error desconocido'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
