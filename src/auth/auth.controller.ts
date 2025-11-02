@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Delete,
   Body,
   UsePipes,
   ValidationPipe,
@@ -190,6 +191,32 @@ export class AuthController {
     } catch (error) {
       throw new HttpException(
         'Error al sincronizar roles',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('admin/delete-user')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async deleteUser(
+    @Req() req: Request,
+    @Body() body: { userSub: string },
+  ) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const result = await this.cognitoService.adminDeleteUser(body.userSub);
+      return {
+        statusCode: HttpStatus.OK,
+        message: `Usuario ${body.userSub} eliminado exitosamente de Cognito y DynamoDB`,
+        data: result,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      }
+      throw new HttpException(
+        'Error al eliminar usuario',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
