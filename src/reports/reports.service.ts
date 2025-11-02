@@ -45,8 +45,18 @@ export class ReportsService {
         direct: approvedSales.filter((sale) => sale.type === 'direct').length,
         reseller: approvedSales.filter((sale) => sale.type === 'reseller').length,
       };
+      const freeSales = approvedSales.filter((sale) => sale.isFree === true);
+      const paidSales = approvedSales.filter((sale) => !sale.isFree || sale.isFree === false);
       const ticketsSold = approvedSales.reduce(
         (sum, sale) => sum + (sale.quantity || 0),
+        0,
+      );
+      const freeTicketsSold = freeSales.reduce(
+        (sum, sale) => sum + (sale.quantity || 0),
+        0,
+      );
+      const paidRevenue = paidSales.reduce(
+        (sum, sale) => sum + (sale.total || 0),
         0,
       );
       const salesByEvent = {};
@@ -61,12 +71,18 @@ export class ReportsService {
             totalSales: 0,
             totalTickets: 0,
             totalRevenue: 0,
+            freeTickets: 0,
+            freeSales: 0,
             batches: {},
           };
         }
         salesByEvent[eventId].totalSales += 1;
         salesByEvent[eventId].totalTickets += sale.quantity;
-        salesByEvent[eventId].totalRevenue += sale.total;
+        salesByEvent[eventId].totalRevenue += sale.total || 0;
+        if (sale.isFree === true) {
+          salesByEvent[eventId].freeTickets += sale.quantity;
+          salesByEvent[eventId].freeSales += 1;
+        }
         const batchId = sale.batchId;
         if (!salesByEvent[eventId].batches[batchId]) {
           const batch = await this.batchesService.findOne(eventId, batchId);
@@ -82,7 +98,11 @@ export class ReportsService {
       return {
         totalSales,
         totalRevenue,
+        paidRevenue,
         ticketsSold,
+        freeTicketsSold,
+        freeSalesCount: freeSales.length,
+        paidSalesCount: paidSales.length,
         salesByType,
         salesByEvent,
       };
@@ -128,7 +148,10 @@ export class ReportsService {
         throw new HttpException('Tanda no encontrada', HttpStatus.NOT_FOUND);
       }
       return {
-        sale: sale.Item,
+        sale: {
+          ...sale.Item,
+          saleType: sale.Item.isFree ? 'VENTA GRATIS' : 'VENTA PAGADA',
+        },
         tickets: tickets.Items || [],
         buyer: {
           id: user.id,
@@ -201,6 +224,14 @@ export class ReportsService {
           const totalRevenue = resellerSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
           const totalSales = resellerSales.length;
           
+          // Separate free and paid sales
+          const freeSales = resellerSales.filter(sale => sale.isFree === true);
+          const paidSales = resellerSales.filter(sale => !sale.isFree || sale.isFree === false);
+          const freeTicketsSold = freeSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
+          const paidTicketsSold = paidSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
+          const freeSalesCount = freeSales.length;
+          const paidSalesCount = paidSales.length;
+          
           // Calculate average ticket price
           const averageTicketPrice = totalTicketsSold > 0 ? totalRevenue / totalTicketsSold : 0;
           
@@ -215,11 +246,18 @@ export class ReportsService {
                 ticketsSold: 0,
                 revenue: 0,
                 sales: 0,
+                freeTickets: 0,
+                freeSales: 0,
               };
             }
             salesByEvent[eventId].ticketsSold += sale.quantity;
-            salesByEvent[eventId].revenue += sale.total;
+            salesByEvent[eventId].revenue += sale.total || 0;
             salesByEvent[eventId].sales += 1;
+            
+            if (sale.isFree === true) {
+              salesByEvent[eventId].freeTickets += sale.quantity;
+              salesByEvent[eventId].freeSales += 1;
+            }
           }
 
           return {
@@ -227,7 +265,11 @@ export class ReportsService {
             name: `${reseller.given_name} ${reseller.family_name}`,
             email: reseller.email,
             totalSales,
+            paidSalesCount,
+            freeSalesCount: freeSalesCount,
             totalTicketsSold,
+            paidTicketsSold,
+            freeTicketsSold,
             totalRevenue,
             averageTicketPrice: Math.round(averageTicketPrice * 100) / 100,
             salesByEvent,
