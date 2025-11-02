@@ -248,13 +248,20 @@ export class CognitoService {
       
       // 1. Buscar usuario en DynamoDB - userSub puede ser email o sub de Cognito
       console.log('Step 1: Searching user in DynamoDB...');
-      const user = await this.usersService.findUserForRoleSync(userSub, userSub);
-      console.log('findUserForRoleSync result:', {
-        found: !!user,
-        userId: user?.id,
-        email: user?.email,
-        role: user?.role,
-      });
+      let user;
+      try {
+        user = await this.usersService.findUserForRoleSync(userSub, userSub);
+        console.log('findUserForRoleSync result:', {
+          found: !!user,
+          userId: user?.id,
+          email: user?.email,
+          role: user?.role,
+        });
+      } catch (searchError: any) {
+        console.error('Error searching user in DynamoDB:', searchError?.message);
+        user = null;
+        // Continuar aunque falle la búsqueda
+      }
       
       if (user) {
         // 2. Usuario encontrado en DynamoDB - eliminar de DynamoDB primero
@@ -284,13 +291,14 @@ export class CognitoService {
             console.log(`Usuario eliminado de Cognito: ${user.email}`);
           } catch (cognitoError: any) {
             console.log('Cognito deletion error:', {
-              name: cognitoError.name,
-              message: cognitoError.message,
+              name: cognitoError?.name,
+              message: cognitoError?.message,
             });
-            if (cognitoError.name === 'UserNotFoundException') {
+            if (cognitoError?.name === 'UserNotFoundException') {
               console.warn(`Usuario ${user.email} no encontrado en Cognito`);
             } else {
-              throw cognitoError;
+              console.error('Error inesperado eliminando de Cognito:', cognitoError?.message);
+              // No lanzar excepción, solo loguear
             }
           }
         } else {
@@ -313,13 +321,14 @@ export class CognitoService {
           console.log(`Usuario eliminado de Cognito: ${userSub}`);
         } catch (cognitoError: any) {
           console.log('Cognito deletion error:', {
-            name: cognitoError.name,
-            message: cognitoError.message,
+            name: cognitoError?.name,
+            message: cognitoError?.message,
           });
-          if (cognitoError.name === 'UserNotFoundException') {
+          if (cognitoError?.name === 'UserNotFoundException') {
             console.warn(`Usuario ${userSub} no encontrado en Cognito`);
           } else {
-            throw cognitoError;
+            console.error('Error inesperado eliminando de Cognito:', cognitoError?.message);
+            // No lanzar excepción, solo loguear
           }
         }
       }
@@ -335,14 +344,22 @@ export class CognitoService {
       };
       console.log('Final result:', result);
       return result;
-    } catch (error) {
-      console.error('Error en adminDeleteUser:', error);
+    } catch (error: any) {
+      console.error('Error en adminDeleteUser (non-critical):', error);
       console.error('Error details:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack,
       });
-      throw new InternalServerErrorException('Error al eliminar usuario del sistema');
+      // Nunca lanzar excepción, siempre retornar resultado
+      return {
+        userSub,
+        deletedFromDynamoDB: false,
+        deletedDynamoUserId: null,
+        deletedFromCognito: false,
+        message: `Error al eliminar usuario: ${error?.message || 'Error desconocido'}`,
+        error: error?.name || 'UNKNOWN_ERROR',
+      };
     }
   }
 
