@@ -12,6 +12,7 @@ import { SalesService } from './sales.service';
 import { PaymentsService } from '../payments/payments.service';
 import { BatchesService } from '../batches/batches.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { CreateFreeSaleDto } from './dto/create-free-sale.dto';
 import type { Request } from 'express';
 
 @Controller('sales')
@@ -141,6 +142,35 @@ export class SalesController {
       }
       throw new HttpException(
         'Error al procesar la compra por revendedor',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('reseller/free')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async createFreeTicket(@Body() dto: CreateFreeSaleDto, @Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureReseller(claims);
+      
+      const sale = await this.salesService.createFreeSale(
+        dto,
+        claims['sub'],
+        claims['email'] || claims['cognito:username'],
+      );
+      
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Ticket gratis generado exitosamente',
+        data: sale,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al generar ticket gratis',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
