@@ -158,16 +158,28 @@ export class UsersController {
 
   @Delete('admin/users/:userId')
   async deleteUser(@Param('userId') userId: string, @Req() req: Request) {
+    console.log('=== DELETE USER CONTROLLER ===');
+    console.log('Received userId:', userId);
     try {
       const claims = this.getClaims(req);
+      console.log('User claims:', {
+        sub: claims?.sub,
+        role: claims?.['custom:role'],
+        email: claims?.email,
+      });
       this.ensureAdmin(claims);
+      console.log('Admin authorization passed');
       
+      console.log('Calling usersService.deleteUser with userId:', userId);
       const result = await this.usersService.deleteUser(userId);
+      console.log('Service returned result:', result);
+      
       return {
         statusCode: HttpStatus.OK,
         message: result.message,
       };
     } catch (error) {
+      console.error('DELETE USER ERROR in controller:', error);
       if (error instanceof HttpException) {
         throw error;
       }

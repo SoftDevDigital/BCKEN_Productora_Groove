@@ -239,16 +239,26 @@ export class CognitoService {
   }
 
   async adminDeleteUser(userSub: string) {
+    console.log('=== ADMIN DELETE USER (Cognito Service) ===');
+    console.log('Received userSub:', userSub);
     try {
       let deletedFromDynamoDB = false;
       let deletedFromCognito = false;
       let deletedDynamoUserId: string | null = null;
       
       // 1. Buscar usuario en DynamoDB - userSub puede ser email o sub de Cognito
+      console.log('Step 1: Searching user in DynamoDB...');
       const user = await this.usersService.findUserForRoleSync(userSub, userSub);
+      console.log('findUserForRoleSync result:', {
+        found: !!user,
+        userId: user?.id,
+        email: user?.email,
+        role: user?.role,
+      });
       
       if (user) {
         // 2. Usuario encontrado en DynamoDB - eliminar de DynamoDB primero
+        console.log('Step 2: User found in DynamoDB, deleting from DynamoDB first...');
         try {
           await this.usersService.deleteUserDirect(user.id);
           deletedFromDynamoDB = true;
@@ -260,36 +270,52 @@ export class CognitoService {
         
         // 3. Eliminar de Cognito - usar el email del usuario encontrado
         if (user.email) {
+          console.log('Step 3: Deleting user from Cognito using email:', user.email);
+          const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
+          console.log('Cognito UserPoolId:', cognitoUserPoolId);
           try {
             await this.client.send(
               new AdminDeleteUserCommand({
-                UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+                UserPoolId: cognitoUserPoolId,
                 Username: user.email,
               }),
             );
             deletedFromCognito = true;
             console.log(`Usuario eliminado de Cognito: ${user.email}`);
           } catch (cognitoError: any) {
+            console.log('Cognito deletion error:', {
+              name: cognitoError.name,
+              message: cognitoError.message,
+            });
             if (cognitoError.name === 'UserNotFoundException') {
               console.warn(`Usuario ${user.email} no encontrado en Cognito`);
             } else {
               throw cognitoError;
             }
           }
+        } else {
+          console.warn('User has no email, cannot delete from Cognito');
         }
       } else {
         // 4. No encontrado en DynamoDB - intentar eliminar de Cognito asumiendo que userSub es email
         console.warn(`Usuario ${userSub} no encontrado en DynamoDB, intentando eliminar de Cognito`);
+        console.log('Attempting to delete from Cognito using userSub as username');
+        const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
+        console.log('Cognito UserPoolId:', cognitoUserPoolId);
         try {
           await this.client.send(
             new AdminDeleteUserCommand({
-              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+              UserPoolId: cognitoUserPoolId,
               Username: userSub,
             }),
           );
           deletedFromCognito = true;
           console.log(`Usuario eliminado de Cognito: ${userSub}`);
         } catch (cognitoError: any) {
+          console.log('Cognito deletion error:', {
+            name: cognitoError.name,
+            message: cognitoError.message,
+          });
           if (cognitoError.name === 'UserNotFoundException') {
             console.warn(`Usuario ${userSub} no encontrado en Cognito`);
           } else {
@@ -298,7 +324,7 @@ export class CognitoService {
         }
       }
       
-      return {
+      const result = {
         userSub,
         deletedFromDynamoDB,
         deletedDynamoUserId,
@@ -307,8 +333,15 @@ export class CognitoService {
           ? 'Usuario eliminado completamente del sistema' 
           : 'Usuario no encontrado en ningún sistema'
       };
+      console.log('Final result:', result);
+      return result;
     } catch (error) {
       console.error('Error en adminDeleteUser:', error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       throw new InternalServerErrorException('Error al eliminar usuario del sistema');
     }
   }

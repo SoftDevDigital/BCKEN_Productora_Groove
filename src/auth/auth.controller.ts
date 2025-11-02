@@ -202,16 +202,30 @@ export class AuthController {
     @Req() req: Request,
     @Body() body: { userSub: string },
   ) {
+    console.log('=== DELETE USER AUTH CONTROLLER ===');
+    console.log('Received body:', body);
+    console.log('Received userSub:', body.userSub);
     try {
       const claims = this.getClaims(req);
+      console.log('User claims:', {
+        sub: claims?.sub,
+        role: claims?.['custom:role'],
+        email: claims?.email,
+      });
       this.ensureAdmin(claims);
+      console.log('Admin authorization passed');
+      
+      console.log('Calling cognitoService.adminDeleteUser with userSub:', body.userSub);
       const result = await this.cognitoService.adminDeleteUser(body.userSub);
+      console.log('Service returned result:', result);
+      
       return {
         statusCode: HttpStatus.OK,
         message: `Usuario ${body.userSub} eliminado exitosamente de Cognito y DynamoDB`,
         data: result,
       };
     } catch (error) {
+      console.error('DELETE USER ERROR in auth controller:', error);
       if (error instanceof BadRequestException) {
         throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
       }
