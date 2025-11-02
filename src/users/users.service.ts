@@ -211,25 +211,41 @@ export class UsersService {
     cognitoSub: string,
     email: string,
   ): Promise<User | null> {
+    console.log('=== FIND USER FOR ROLE SYNC ===');
+    console.log('Searching with cognitoSub:', cognitoSub, 'email:', email);
+    
     // 1) Buscar por id = sub de Cognito
+    console.log('Step 1: Searching by cognitoSub as id:', cognitoSub);
     try {
       const bySub = await this.docClient.send(
         new GetCommand({ TableName: this.tableName, Key: { id: cognitoSub } }),
       );
       if (bySub.Item) {
+        console.log('Found user by cognitoSub:', bySub.Item);
         return bySub.Item as User;
       }
-    } catch {}
+      console.log('No user found by cognitoSub');
+    } catch (err) {
+      console.log('Error searching by cognitoSub:', err.message);
+    }
+    
     // 2) Buscar por id = email (algunos registros usan email como id)
+    console.log('Step 2: Searching by email as id:', email);
     try {
       const byEmailId = await this.docClient.send(
         new GetCommand({ TableName: this.tableName, Key: { id: email } }),
       );
       if (byEmailId.Item) {
+        console.log('Found user by email id:', byEmailId.Item);
         return byEmailId.Item as User;
       }
-    } catch {}
+      console.log('No user found by email id');
+    } catch (err) {
+      console.log('Error searching by email id:', err.message);
+    }
+    
     // 3) Escanear por atributo email
+    console.log('Step 3: Scanning by email attribute:', email);
     try {
       const scan = await this.docClient.send(
         new ScanCommand({
@@ -239,6 +255,11 @@ export class UsersService {
         }),
       );
       const item = (scan.Items || [])[0] as User | undefined;
+      if (item) {
+        console.log('Found user by email scan:', item);
+      } else {
+        console.log('No user found by email scan');
+      }
       return item || null;
     } catch (error) {
       console.error('Error en findUserForRoleSync:', error);
@@ -431,9 +452,15 @@ export class UsersService {
   }
 
   async deleteUserDirect(userId: string): Promise<void> {
+    console.log('=== DELETE USER DIRECT ===');
+    console.log('Attempting to delete from DynamoDB only, userId:', userId);
     try {
       // Delete user from DynamoDB only (sin eliminar de Cognito)
       // No verificar si existe primero, simplemente intentar eliminar
+      console.log('DeleteCommand params:', {
+        TableName: this.tableName,
+        Key: { id: userId },
+      });
       await this.docClient.send(
         new DeleteCommand({
           TableName: this.tableName,
@@ -443,14 +470,24 @@ export class UsersService {
       console.log(`Usuario ${userId} eliminado de DynamoDB`);
     } catch (error: any) {
       console.error('Error al eliminar usuario de DynamoDB:', error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+      });
       // No lanzar error, solo loguear - la eliminación puede fallar si no existe
       console.warn(`No se pudo eliminar usuario ${userId} de DynamoDB: ${error.message}`);
     }
   }
 
   async deleteUser(userId: string): Promise<{ message: string }> {
+    console.log('=== DELETE USER SERVICE ===');
+    console.log('Attempting to delete userId:', userId);
     try {
       // First, check if user exists in DynamoDB
+      console.log('Step 1: Checking if user exists in DynamoDB...');
+      console.log('TableName:', this.tableName);
+      console.log('Key:', { id: userId });
+      
       const user = await this.docClient.send(
         new GetCommand({
           TableName: this.tableName,
@@ -458,28 +495,43 @@ export class UsersService {
         }),
       );
 
+      console.log('DynamoDB GetCommand result:', {
+        hasItem: !!user.Item,
+        item: user.Item,
+      });
+
       if (!user.Item) {
+        console.error('User not found in DynamoDB:', userId);
         throw new NotFoundException(`Usuario no encontrado: ${userId}`);
       }
 
+      console.log('Step 2: Deleting user from DynamoDB...');
       // Delete user from DynamoDB
-      await this.docClient.send(
+      const deleteResult = await this.docClient.send(
         new DeleteCommand({
           TableName: this.tableName,
           Key: { id: userId },
         }),
       );
+      console.log('DynamoDB DeleteCommand successful');
 
       // Delete user from Cognito (if exists)
+      console.log('Step 3: Attempting to delete user from Cognito...');
+      const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
+      console.log('Cognito UserPoolId:', cognitoUserPoolId);
+      console.log('Cognito Username:', userId);
+      
       try {
         await this.cognitoClient.send(
           new AdminDeleteUserCommand({
-            UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+            UserPoolId: cognitoUserPoolId,
             Username: userId,
           }),
         );
+        console.log('Cognito AdminDeleteUserCommand successful');
       } catch (cognitoError) {
         console.warn(`User ${userId} not found in Cognito or already deleted:`, cognitoError.message);
+        console.log('Cognito deletion failed, but continuing...');
         // Continue even if Cognito deletion fails
       }
 
@@ -487,6 +539,11 @@ export class UsersService {
       return { message: `Usuario ${userId} eliminado exitosamente` };
     } catch (error) {
       console.error('Error al eliminar usuario:', error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       if (error instanceof HttpException) {
         throw error;
       }
