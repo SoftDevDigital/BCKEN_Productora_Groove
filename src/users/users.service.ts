@@ -430,6 +430,25 @@ export class UsersService {
     }
   }
 
+  async deleteUserDirect(userId: string): Promise<void> {
+    try {
+      // Delete user from DynamoDB only (sin eliminar de Cognito)
+      await this.docClient.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: { id: userId },
+        }),
+      );
+      console.log(`Usuario ${userId} eliminado de DynamoDB`);
+    } catch (error) {
+      console.error('Error al eliminar usuario de DynamoDB:', error);
+      throw new HttpException(
+        `Error al eliminar usuario de DynamoDB: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   async deleteUser(userId: string): Promise<{ message: string }> {
     try {
       // First, check if user exists in DynamoDB

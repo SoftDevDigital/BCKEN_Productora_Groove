@@ -242,7 +242,7 @@ export class CognitoService {
     try {
       let deletedFromDynamoDB = false;
       let deletedFromCognito = false;
-      let deletedDynamoUserId = null;
+      let deletedDynamoUserId: string | null = null;
       
       // 1. Buscar usuario en DynamoDB usando búsqueda robusta
       const user = await this.usersService.findUserForRoleSync(userSub, '');
@@ -250,16 +250,11 @@ export class CognitoService {
       if (user) {
         // 2. Usuario encontrado en DynamoDB - eliminar de DynamoDB primero
         try {
-          await this.docClient.send(
-            new DeleteCommand({
-              TableName: 'Users-v2',
-              Key: { id: user.id },
-            }),
-          );
+          await this.usersService.deleteUserDirect(user.id);
           deletedFromDynamoDB = true;
           deletedDynamoUserId = user.id;
           console.log(`Usuario eliminado de DynamoDB: ${user.id}`);
-        } catch (dbError) {
+        } catch (dbError: any) {
           console.error(`Error eliminando de DynamoDB: ${dbError.message}`);
         }
         
