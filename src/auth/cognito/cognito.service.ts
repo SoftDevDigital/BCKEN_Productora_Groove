@@ -244,8 +244,8 @@ export class CognitoService {
       let deletedFromCognito = false;
       let deletedDynamoUserId: string | null = null;
       
-      // 1. Buscar usuario en DynamoDB usando búsqueda robusta
-      const user = await this.usersService.findUserForRoleSync(userSub, '');
+      // 1. Buscar usuario en DynamoDB - userSub puede ser email o sub de Cognito
+      const user = await this.usersService.findUserForRoleSync(userSub, userSub);
       
       if (user) {
         // 2. Usuario encontrado en DynamoDB - eliminar de DynamoDB primero
@@ -258,26 +258,28 @@ export class CognitoService {
           console.error(`Error eliminando de DynamoDB: ${dbError.message}`);
         }
         
-        // 3. Intentar eliminar de Cognito usando el userSub proporcionado
-        try {
-          await this.client.send(
-            new AdminDeleteUserCommand({
-              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
-              Username: userSub,
-            }),
-          );
-          deletedFromCognito = true;
-          console.log(`Usuario eliminado de Cognito: ${userSub}`);
-        } catch (cognitoError: any) {
-          if (cognitoError.name === 'UserNotFoundException') {
-            console.warn(`Usuario ${userSub} no encontrado en Cognito`);
-          } else {
-            throw cognitoError;
+        // 3. Eliminar de Cognito - usar el email del usuario encontrado
+        if (user.email) {
+          try {
+            await this.client.send(
+              new AdminDeleteUserCommand({
+                UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+                Username: user.email,
+              }),
+            );
+            deletedFromCognito = true;
+            console.log(`Usuario eliminado de Cognito: ${user.email}`);
+          } catch (cognitoError: any) {
+            if (cognitoError.name === 'UserNotFoundException') {
+              console.warn(`Usuario ${user.email} no encontrado en Cognito`);
+            } else {
+              throw cognitoError;
+            }
           }
         }
       } else {
-        // 4. No encontrado en DynamoDB - solo eliminar de Cognito
-        console.warn(`Usuario ${userSub} no encontrado en DynamoDB, intentando eliminar solo de Cognito`);
+        // 4. No encontrado en DynamoDB - intentar eliminar de Cognito asumiendo que userSub es email
+        console.warn(`Usuario ${userSub} no encontrado en DynamoDB, intentando eliminar de Cognito`);
         try {
           await this.client.send(
             new AdminDeleteUserCommand({
