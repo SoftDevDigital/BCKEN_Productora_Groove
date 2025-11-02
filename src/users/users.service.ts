@@ -13,6 +13,7 @@ import {
   ScanCommand,
   UpdateCommand,
   DeleteCommand,
+  QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { EventsService } from '../events/events.service';
 import { BatchesService } from '../batches/batches.service';
@@ -185,7 +186,56 @@ export class UsersService {
         // Continuar con la búsqueda secundaria si falla el Get
       }
 
-      // 2) Scan y comparar case-insensitive contra email, alias o id
+      // 2) Buscar por email usando EmailIndex (más eficiente que Scan)
+      try {
+        const byEmail = await this.docClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            IndexName: 'EmailIndex',
+            KeyConditionExpression: 'email = :email',
+            ExpressionAttributeValues: { ':email': raw },
+          }),
+        );
+        if (byEmail.Items && byEmail.Items.length > 0) {
+          // Buscar coincidencia exacta (case-insensitive)
+          const found = byEmail.Items.find((u: any) => 
+            (u.email || '').toLowerCase() === normalized
+          ) as User | undefined;
+          if (found) {
+            return found;
+          }
+          // Si no hay coincidencia exacta pero hay resultados, devolver el primero
+          // (aunque esto no debería pasar si el email coincide exactamente)
+          return byEmail.Items[0] as User;
+        }
+      } catch (queryError) {
+        console.log('Query by email index failed, falling back to scan:', queryError.message);
+      }
+
+      // 3) Si el índice falla, buscar por alias usando AliasIndex
+      try {
+        const byAlias = await this.docClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            IndexName: 'AliasIndex',
+            KeyConditionExpression: 'alias = :alias',
+            ExpressionAttributeValues: { ':alias': raw },
+          }),
+        );
+        if (byAlias.Items && byAlias.Items.length > 0) {
+          const found = byAlias.Items.find((u: any) => 
+            (u.alias || '').toLowerCase() === normalized
+          ) as User | undefined;
+          if (found) {
+            return found;
+          }
+          return byAlias.Items[0] as User;
+        }
+      } catch (aliasError) {
+        console.log('Query by alias index failed, falling back to scan:', aliasError.message);
+      }
+
+      // 4) Fallback: Scan y comparar case-insensitive (último recurso, menos eficiente)
       const result = await this.docClient.send(
         new ScanCommand({ TableName: this.tableName }),
       );
@@ -483,60 +533,82 @@ export class UsersService {
     console.log('=== DELETE USER SERVICE ===');
     console.log('Attempting to delete userId:', userId);
     try {
-      // First, check if user exists in DynamoDB
-      console.log('Step 1: Checking if user exists in DynamoDB...');
+      // First, check if user exists in DynamoDB by id
+      console.log('Step 1: Checking if user exists in DynamoDB by id...');
       console.log('TableName:', this.tableName);
       console.log('Key:', { id: userId });
       
-      const user = await this.docClient.send(
+      let user = await this.docClient.send(
         new GetCommand({
           TableName: this.tableName,
           Key: { id: userId },
         }),
       );
 
-      console.log('DynamoDB GetCommand result:', {
+      console.log('DynamoDB GetCommand result (by id):', {
         hasItem: !!user.Item,
         item: user.Item,
       });
 
+      // If not found by id, try to find by email (userId might be an email)
+      let actualUserId: string;
+      let userEmail: string;
+      
       if (!user.Item) {
-        console.error('User not found in DynamoDB:', userId);
-        throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+        console.log('User not found by id, trying to search by email/alias...');
+        const userByEmail = await this.getUserByEmailOrAlias(userId);
+        if (userByEmail) {
+          console.log('User found by email/alias:', {
+            id: userByEmail.id,
+            email: userByEmail.email,
+          });
+          actualUserId = userByEmail.id;
+          userEmail = userByEmail.email || userId;
+        } else {
+          console.error('User not found in DynamoDB by id or email:', userId);
+          throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+        }
+      } else {
+        actualUserId = user.Item.id;
+        userEmail = user.Item.email || userId;
       }
 
+      console.log('Will delete user with:', { actualUserId, userEmail });
+
       console.log('Step 2: Deleting user from DynamoDB...');
-      // Delete user from DynamoDB
+      console.log('Using actual userId:', actualUserId);
+      // Delete user from DynamoDB using the actual id found
       const deleteResult = await this.docClient.send(
         new DeleteCommand({
           TableName: this.tableName,
-          Key: { id: userId },
+          Key: { id: actualUserId },
         }),
       );
       console.log('DynamoDB DeleteCommand successful');
 
       // Delete user from Cognito (if exists)
+      // Use email as Username in Cognito (since username_attributes = ["email"])
       console.log('Step 3: Attempting to delete user from Cognito...');
       const cognitoUserPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID');
       console.log('Cognito UserPoolId:', cognitoUserPoolId);
-      console.log('Cognito Username:', userId);
+      console.log('Cognito Username (email):', userEmail);
       
       try {
         await this.cognitoClient.send(
           new AdminDeleteUserCommand({
             UserPoolId: cognitoUserPoolId,
-            Username: userId,
+            Username: userEmail, // Use email as Username in Cognito
           }),
         );
         console.log('Cognito AdminDeleteUserCommand successful');
       } catch (cognitoError) {
-        console.warn(`User ${userId} not found in Cognito or already deleted:`, cognitoError.message);
+        console.warn(`User ${userEmail} not found in Cognito or already deleted:`, cognitoError.message);
         console.log('Cognito deletion failed, but continuing...');
         // Continue even if Cognito deletion fails
       }
 
-      console.log(`Usuario ${userId} eliminado exitosamente`);
-      return { message: `Usuario ${userId} eliminado exitosamente` };
+      console.log(`Usuario ${actualUserId} (${userEmail}) eliminado exitosamente`);
+      return { message: `Usuario ${actualUserId} (${userEmail}) eliminado exitosamente` };
     } catch (error) {
       console.error('Error al eliminar usuario:', error);
       console.error('Error details:', {
