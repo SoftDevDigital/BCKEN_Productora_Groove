@@ -12,6 +12,7 @@ import {
   ResendConfirmationCodeCommand,
   AdminConfirmSignUpCommand,
   AdminGetUserCommand,
+  AdminDeleteUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -234,6 +235,84 @@ export class CognitoService {
     } catch (error) {
       console.error('Error en syncAllUserRoles:', error);
       throw new InternalServerErrorException('Error al sincronizar roles de usuarios');
+    }
+  }
+
+  async adminDeleteUser(userSub: string) {
+    try {
+      let deletedFromDynamoDB = false;
+      let deletedFromCognito = false;
+      let deletedDynamoUserId = null;
+      
+      // 1. Buscar usuario en DynamoDB usando búsqueda robusta
+      const user = await this.usersService.findUserForRoleSync(userSub, '');
+      
+      if (user) {
+        // 2. Usuario encontrado en DynamoDB - eliminar de DynamoDB primero
+        try {
+          await this.docClient.send(
+            new DeleteCommand({
+              TableName: 'Users-v2',
+              Key: { id: user.id },
+            }),
+          );
+          deletedFromDynamoDB = true;
+          deletedDynamoUserId = user.id;
+          console.log(`Usuario eliminado de DynamoDB: ${user.id}`);
+        } catch (dbError) {
+          console.error(`Error eliminando de DynamoDB: ${dbError.message}`);
+        }
+        
+        // 3. Intentar eliminar de Cognito usando el userSub proporcionado
+        try {
+          await this.client.send(
+            new AdminDeleteUserCommand({
+              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+              Username: userSub,
+            }),
+          );
+          deletedFromCognito = true;
+          console.log(`Usuario eliminado de Cognito: ${userSub}`);
+        } catch (cognitoError: any) {
+          if (cognitoError.name === 'UserNotFoundException') {
+            console.warn(`Usuario ${userSub} no encontrado en Cognito`);
+          } else {
+            throw cognitoError;
+          }
+        }
+      } else {
+        // 4. No encontrado en DynamoDB - solo eliminar de Cognito
+        console.warn(`Usuario ${userSub} no encontrado en DynamoDB, intentando eliminar solo de Cognito`);
+        try {
+          await this.client.send(
+            new AdminDeleteUserCommand({
+              UserPoolId: this.configService.get<string>('COGNITO_USER_POOL_ID'),
+              Username: userSub,
+            }),
+          );
+          deletedFromCognito = true;
+          console.log(`Usuario eliminado de Cognito: ${userSub}`);
+        } catch (cognitoError: any) {
+          if (cognitoError.name === 'UserNotFoundException') {
+            console.warn(`Usuario ${userSub} no encontrado en Cognito`);
+          } else {
+            throw cognitoError;
+          }
+        }
+      }
+      
+      return {
+        userSub,
+        deletedFromDynamoDB,
+        deletedDynamoUserId,
+        deletedFromCognito,
+        message: deletedFromDynamoDB || deletedFromCognito 
+          ? 'Usuario eliminado completamente del sistema' 
+          : 'Usuario no encontrado en ningún sistema'
+      };
+    } catch (error) {
+      console.error('Error en adminDeleteUser:', error);
+      throw new InternalServerErrorException('Error al eliminar usuario del sistema');
     }
   }
 
