@@ -696,75 +696,104 @@ Equipo Groove Tickets
         if (!batch) batch = { name: 'Tanda' };
       }
 
-      // 6. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+      // 6. Obtener QR attachments (si falla algún QR, continuar sin attachments)
+      // Por ahora, saltamos los attachments para evitar errores de Buffer
+      // El usuario puede ver los QRs desde su cuenta
       const qrAttachments: any[] = [];
-      await Promise.all(
-        tickets.map(async (ticket, index) => {
-          try {
-            if (!ticket.qrS3Url) {
-              throw new Error(`QR S3 URL is undefined for ticket ${ticket.ticketId}`);
-            }
-            const urlParts = ticket.qrS3Url.split('.amazonaws.com/');
-            if (!urlParts || urlParts.length < 2) {
-              throw new Error(`Invalid QR S3 URL format for ticket ${ticket.ticketId}: ${ticket.qrS3Url}`);
-            }
-            const qrKey = urlParts[1].replace(/^\/+/, '');
-            if (!qrKey) {
-              throw new Error(`Could not extract QR key from URL: ${ticket.qrS3Url}`);
-            }
-            const s3Response = await this.s3Client.send(
-              new GetObjectCommand({
-                Bucket:
-                  this.configService.get<string>('S3_BUCKET') ||
-                  'ticket-qr-bucket-dev-v2',
-                Key: qrKey,
-              }),
-            );
-            if (!s3Response.Body) {
-              throw new Error(`No body returned for QR code with key: ${qrKey}`);
-            }
-            const body = await s3Response.Body.transformToByteArray();
-            if (!body) {
-              throw new Error(`Body is undefined for QR code with key: ${qrKey}`);
-            }
-            // transformToByteArray() retorna Uint8Array, convertir a Buffer
-            let buffer: Buffer;
+      console.log('Generando attachments para email (intentando leer QRs de S3)...');
+      
+      try {
+        await Promise.all(
+          tickets.map(async (ticket, index) => {
             try {
-              // Convertir directamente a Buffer (acepta Uint8Array, ArrayBuffer, Array, etc.)
-              buffer = Buffer.from(body as Uint8Array);
-            } catch (bufferError: any) {
-              throw new Error(`Error creating buffer from body: ${bufferError.message}, body type: ${typeof body}`);
+              if (!ticket.qrS3Url) {
+                console.warn(`QR S3 URL is undefined for ticket ${ticket.ticketId}`);
+                return;
+              }
+              
+              const urlParts = ticket.qrS3Url.split('.amazonaws.com/');
+              if (!urlParts || urlParts.length < 2) {
+                console.warn(`Invalid QR S3 URL format for ticket ${ticket.ticketId}: ${ticket.qrS3Url}`);
+                return;
+              }
+              
+              const qrKey = urlParts[1].replace(/^\/+/, '');
+              if (!qrKey) {
+                console.warn(`Could not extract QR key from URL: ${ticket.qrS3Url}`);
+                return;
+              }
+              
+              // Pequeño delay para asegurar que el objeto esté disponible en S3
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              const s3Response = await this.s3Client.send(
+                new GetObjectCommand({
+                  Bucket:
+                    this.configService.get<string>('S3_BUCKET') ||
+                    'ticket-qr-bucket-dev-v2',
+                  Key: qrKey,
+                }),
+              );
+              
+              if (!s3Response.Body) {
+                console.warn(`No body returned for QR code with key: ${qrKey}`);
+                return;
+              }
+              
+              const body = await s3Response.Body.transformToByteArray();
+              if (!body) {
+                console.warn(`Body is undefined for QR code with key: ${qrKey}`);
+                return;
+              }
+              
+              // Convertir a Buffer de forma segura
+              let buffer: Buffer;
+              try {
+                buffer = Buffer.from(body as Uint8Array);
+              } catch (bufferError: any) {
+                console.error(`Error creating buffer: ${bufferError.message}`);
+                return;
+              }
+              
+              if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+                console.warn(`Buffer is invalid or empty for ticket ${ticket.ticketId}`);
+                return;
+              }
+              
+              const base64Content = buffer.toString('base64');
+              if (!base64Content || base64Content.length === 0) {
+                console.warn(`Base64 content is empty for ticket ${ticket.ticketId}`);
+                return;
+              }
+              
+              qrAttachments.push({
+                content: base64Content,
+                filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+                type: 'image/png',
+                disposition: 'attachment',
+                contentId: `qr-${ticket.ticketId}`,
+              });
+              
+              console.log(`QR attachment agregado para ticket ${ticket.ticketId}`);
+            } catch (qrError: any) {
+              console.error(
+                `Error fetching QR code for ticket ${ticket.ticketId}:`,
+                qrError.message,
+              );
+              // Continuar sin este QR
             }
-            
-            // Validar que el buffer sea válido antes de agregarlo
-            if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
-              throw new Error(`Buffer is invalid or empty for ticket ${ticket.ticketId}`);
-            }
-            
-            const base64Content = buffer.toString('base64');
-            if (!base64Content || base64Content.length === 0) {
-              throw new Error(`Base64 content is empty for ticket ${ticket.ticketId}`);
-            }
-            
-            qrAttachments.push({
-              content: base64Content,
-              filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
-              type: 'image/png',
-              disposition: 'attachment',
-              contentId: `qr-${ticket.ticketId}`,
-            });
-          } catch (qrError: any) {
-            console.error(
-              `Error fetching QR code for ticket ${ticket.ticketId}:`,
-              qrError.message,
-            );
-            // Continuar sin este QR, pero loguear el error
-          }
-        }),
-      );
+          }),
+        );
+      } catch (attachmentsError: any) {
+        console.error('Error general al obtener attachments:', attachmentsError.message);
+        // Continuar sin attachments
+        qrAttachments.length = 0;
+      }
       
       if (qrAttachments.length === 0) {
-        console.warn('No se pudo obtener ningún QR code para adjuntar al email');
+        console.warn('No se pudieron obtener QR codes para adjuntar al email. El email se enviará sin attachments.');
+      } else {
+        console.log(`Se obtuvieron ${qrAttachments.length} QR attachments para el email`);
       }
 
       // 6. Obtener nombre del revendedor (simplificado - usar email o intentar desde Cognito)
