@@ -18,8 +18,9 @@ export class EmailService {
     subject: string,
     body: string,
     attachments?: any[],
+    htmlBody?: string,
   ) {
-    const msg = {
+    const msg: any = {
       to,
       from:
         this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
@@ -28,6 +29,9 @@ export class EmailService {
       text: body,
       attachments,
     };
+    if (htmlBody) {
+      msg.html = htmlBody;
+    }
     try {
       await SendGrid.send(msg);
       return { success: true, message: 'Email sent successfully' };
