@@ -115,11 +115,6 @@ export class TicketsService {
         errorCorrectionLevel: 'H', // Alto nivel de corrección
       });
 
-      // Validar que qrBuffer sea válido
-      if (!qrBuffer || !Buffer.isBuffer(qrBuffer)) {
-        throw new Error('QR buffer is invalid or undefined');
-      }
-
       // Crear canvas para agregar diseño VIP
       const padding = 40;
       const vipTextHeight = 50;
