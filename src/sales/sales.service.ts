@@ -253,9 +253,17 @@ export class SalesService {
         const qrAttachments = await Promise.all(
           tickets.map(async (ticket, index) => {
             try {
-              const qrKey = ticket.qrS3Url
-                .split('.amazonaws.com/')[1]
-                .replace(/^\/+/, ''); // Remove leading slashes
+              if (!ticket.qrS3Url) {
+                throw new Error(`QR S3 URL is undefined for ticket ${ticket.ticketId}`);
+              }
+              const urlParts = ticket.qrS3Url.split('.amazonaws.com/');
+              if (!urlParts || urlParts.length < 2) {
+                throw new Error(`Invalid QR S3 URL format for ticket ${ticket.ticketId}: ${ticket.qrS3Url}`);
+              }
+              const qrKey = urlParts[1].replace(/^\/+/, ''); // Remove leading slashes
+              if (!qrKey) {
+                throw new Error(`Could not extract QR key from URL: ${ticket.qrS3Url}`);
+              }
               const s3Response = await this.s3Client.send(
                 new GetObjectCommand({
                   Bucket:
@@ -270,6 +278,9 @@ export class SalesService {
                 );
               }
               const body = await s3Response.Body.transformToByteArray();
+              if (!body) {
+                throw new Error(`Body is undefined for QR code with key: ${qrKey}`);
+              }
               const buffer = Buffer.from(body);
               return {
                 content: buffer.toString('base64'),
@@ -690,9 +701,17 @@ Equipo Groove Tickets
       await Promise.all(
         tickets.map(async (ticket, index) => {
           try {
-            const qrKey = ticket.qrS3Url
-              .split('.amazonaws.com/')[1]
-              .replace(/^\/+/, '');
+            if (!ticket.qrS3Url) {
+              throw new Error(`QR S3 URL is undefined for ticket ${ticket.ticketId}`);
+            }
+            const urlParts = ticket.qrS3Url.split('.amazonaws.com/');
+            if (!urlParts || urlParts.length < 2) {
+              throw new Error(`Invalid QR S3 URL format for ticket ${ticket.ticketId}: ${ticket.qrS3Url}`);
+            }
+            const qrKey = urlParts[1].replace(/^\/+/, '');
+            if (!qrKey) {
+              throw new Error(`Could not extract QR key from URL: ${ticket.qrS3Url}`);
+            }
             const s3Response = await this.s3Client.send(
               new GetObjectCommand({
                 Bucket:
@@ -705,6 +724,9 @@ Equipo Groove Tickets
               throw new Error(`No body returned for QR code with key: ${qrKey}`);
             }
             const body = await s3Response.Body.transformToByteArray();
+            if (!body) {
+              throw new Error(`Body is undefined for QR code with key: ${qrKey}`);
+            }
             const buffer = Buffer.from(body);
             qrAttachments.push({
               content: buffer.toString('base64'),
