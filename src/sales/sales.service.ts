@@ -307,12 +307,183 @@ Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Gracias por tu compra!
 Equipo Groove Tickets
         `;
+
+        // Obtener URL del banner del evento y URL del portal
+        const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
+        const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+        const userName = user.alias || user.email?.split('@')[0] || 'Usuario';
+
+        const emailHtmlBody = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Confirmación de compra</title>
+  <style>
+    /* Estilos mínimos para clientes que respetan <style>; todo lo crítico va inline */
+    @media (prefers-color-scheme: dark) {
+      .bg { background-color: #0f172a !important; }
+      .card { background-color: #111827 !important; border-color: #1f2937 !important; }
+      .text { color: #e5e7eb !important; }
+      .muted { color: #9ca3af !important; }
+      .divider { border-color: #1f2937 !important; }
+      .btn { background: #6d28d9 !important; }
+    }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; }
+      .px { padding-left: 16px !important; padding-right: 16px !important; }
+    }
+    /* Outlook */
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; }
+  </style>
+</head>
+<body style="margin:0; padding:0; background:#0b1220;" class="bg">
+  <center style="width:100%; background:#0b1220;">
+    <div style="max-width:600px; margin:0 auto;" class="container">
+      <!-- Spacer -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr><td height="24"></td></tr>
+      </table>
+
+      <!-- Header -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#121826; border-radius:12px;">
+              <tr>
+                <td style="padding:24px 24px 0 24px; text-align:center;">
+                  <!-- Logo (opcional) -->
+                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 0 12px 0; text-align:center;">
+                  <!-- Banner del evento -->
+                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:0 0 12px 12px;">
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Title Card -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="card" style="border-collapse:collapse; background:#0f172a; border:1px solid #1f2937; border-radius:12px;">
+              <tr>
+                <td style="padding:28px;">
+                  <h1 class="text" style="margin:0 0 8px; font-family:Arial,Helvetica,sans-serif; font-size:22px; line-height:28px; color:#e5e7eb;">
+                    ¡Compra confirmada, ${userName}! 🎉
+                  </h1>
+                  <p class="muted" style="margin:0; font-family:Arial,Helvetica,sans-serif; font-size:14px; line-height:20px; color:#9ca3af;">
+                    Tus tickets están listos. Guarda este email y presenta los QR en la entrada.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Details -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="card" style="border-collapse:collapse; background:#0f172a; border:1px solid #1f2937; border-radius:12px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; font-family:Arial,Helvetica,sans-serif; font-size:14px;">
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Venta ID:</strong> ${saleId}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Precio por ticket:</strong> $${sale.Item.basePrice}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Comisión:</strong> $${sale.Item.commission}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Total abonado:</strong> <span style="color:#a78bfa; font-weight:bold;">$${sale.Item.total}</span></td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td>
+                    </tr>
+                  </table>
+
+                  <!-- Divider -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr><td class="divider" style="border-top:1px solid #1f2937;" height="16"></td></tr>
+                  </table>
+
+                  <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
+                    Los códigos QR están adjuntos como imágenes. Cada ticket tiene su QR único.
+                  </p>
+
+                  <!-- CTA -->
+                  <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0; border-collapse:separate;">
+                    <tr>
+                      <td>
+                        <a href="${ticketsPortalUrl}"
+                           class="btn"
+                           style="background:#7c3aed; color:#ffffff; text-decoration:none; display:inline-block; padding:12px 18px; border-radius:8px; font-family:Arial,Helvetica,sans-serif; font-size:14px;">
+                           Ver tickets en mi cuenta
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Footer -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+              <tr>
+                <td class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; padding:12px 0;">
+                  © ${new Date().getFullYear()} Groove Tickets · No responder a este email
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td height="24"></td></tr>
+      </table>
+    </div>
+  </center>
+</body>
+</html>
+        `;
+
         console.log('Enviando email a:', user.email);
         await this.emailService.sendConfirmationEmail(
           user.email,
           `Confirmación de Compra - ${event?.name || 'Evento'}`,
           emailBody,
           qrAttachments,
+          emailHtmlBody,
         );
         console.log('Email enviado exitosamente');
         return { ...result.Attributes, tickets };
