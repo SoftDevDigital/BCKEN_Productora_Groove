@@ -759,31 +759,118 @@ Equipo Groove Tickets
           const emailBody = `
 Hola ${userName},
 
-¡Tienes un ticket gratuito!
+¡FELICIDADES! Tienes un ticket GRATUITO 🎉
 
-**Ticket Gratuito Cortesía de ${resellerName}**
+🎁 TICKET GRATIS - CORTESÍA DE ${resellerName}
 
-- Venta ID: ${saleId}
-- Evento: ${event?.name || 'Desconocido'}
-- Tanda: ${batch?.name || 'Desconocida'}
-- Cantidad de tickets: ${sale.Item.quantity}
-- Precio: GRATIS ✨
-- Tickets: ${ticketIds.join(', ')}
+Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es completamente GRATIS!
 
-**Códigos QR Únicos**
+═══════════════════════════════════════
+📋 DETALLES DEL TICKET GRATUITO
+═══════════════════════════════════════
+• Venta ID: ${saleId}
+• Evento: ${event?.name || 'Desconocido'}
+• Tanda: ${batch?.name || 'Desconocida'}
+• Cantidad de tickets: ${sale.Item.quantity}
+• Precio: $0.00 (GRATIS) ✨
+• Tickets: ${ticketIds.join(', ')}
+
+═══════════════════════════════════════
+📱 CÓDIGOS QR ÚNICOS
+═══════════════════════════════════════
 Los códigos QR de tus tickets están adjuntos en este correo.
+Estos códigos QR son válidos y funcionan igual que los tickets pagos.
 
-¡Disfruta del evento!
+¡Disfruta del evento! 🎊
 
+Saludos,
 Equipo Groove Tickets
+          `;
+
+          const emailHtmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+    .free-badge { background: #4CAF50; color: white; padding: 10px 20px; border-radius: 25px; display: inline-block; font-weight: bold; font-size: 18px; margin: 20px 0; }
+    .details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
+    .detail-item { margin: 10px 0; padding: 8px 0; border-bottom: 1px solid #eee; }
+    .detail-item:last-child { border-bottom: none; }
+    .detail-label { font-weight: bold; color: #667eea; }
+    .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+    .highlight { color: #4CAF50; font-weight: bold; font-size: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 ¡Tienes un Ticket GRATUITO! 🎉</h1>
+    </div>
+    <div class="content">
+      <p>Hola <strong>${userName}</strong>,</p>
+      
+      <div style="text-align: center;">
+        <div class="free-badge">🎁 TICKET GRATIS</div>
+      </div>
+      
+      <p style="font-size: 16px;">
+        Este ticket ha sido generado especialmente para ti por <strong>${resellerName}</strong>. 
+        <span class="highlight">¡Es completamente GRATIS!</span>
+      </p>
+      
+      <div class="details">
+        <h3 style="margin-top: 0; color: #667eea;">📋 Detalles del Ticket Gratuito</h3>
+        <div class="detail-item">
+          <span class="detail-label">Venta ID:</span> ${saleId}
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Evento:</span> ${event?.name || 'Desconocido'}
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Tanda:</span> ${batch?.name || 'Desconocida'}
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Cantidad de tickets:</span> ${sale.Item.quantity}
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Precio:</span> <span class="highlight">$0.00 (GRATIS) ✨</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Tickets:</span> ${ticketIds.join(', ')}
+        </div>
+      </div>
+      
+      <div class="details">
+        <h3 style="margin-top: 0; color: #667eea;">📱 Códigos QR Únicos</h3>
+        <p>Los códigos QR de tus tickets están adjuntos en este correo.</p>
+        <p><strong>Estos códigos QR son válidos y funcionan igual que los tickets pagos.</strong></p>
+      </div>
+      
+      <p style="text-align: center; font-size: 18px; margin-top: 30px;">
+        <strong>¡Disfruta del evento! 🎊</strong>
+      </p>
+      
+      <div class="footer">
+        <p>Saludos,<br><strong>Equipo Groove Tickets</strong></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
           `;
 
           console.log('Enviando email de ticket gratis a:', userEmail);
           await this.emailService.sendConfirmationEmail(
             userEmail,
-            `Ticket Gratuito - ${event?.name || 'Evento'}`,
+            `🎁 Ticket Gratuito - ${event?.name || 'Evento'}`,
             emailBody,
             qrAttachments,
+            emailHtmlBody,
           );
           console.log('Email de ticket gratis enviado exitosamente');
         } catch (emailError: any) {
