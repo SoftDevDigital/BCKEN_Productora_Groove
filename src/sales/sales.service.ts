@@ -727,27 +727,9 @@ Equipo Groove Tickets
             if (!body) {
               throw new Error(`Body is undefined for QR code with key: ${qrKey}`);
             }
-            // transformToByteArray() retorna Uint8Array, convertir a Buffer
-            let buffer: Buffer;
-            try {
-              // Convertir directamente a Buffer (acepta Uint8Array, ArrayBuffer, Array, etc.)
-              buffer = Buffer.from(body as Uint8Array);
-            } catch (bufferError: any) {
-              throw new Error(`Error creating buffer from body: ${bufferError.message}, body type: ${typeof body}`);
-            }
-            
-            // Validar que el buffer sea válido antes de agregarlo
-            if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
-              throw new Error(`Buffer is invalid or empty for ticket ${ticket.ticketId}`);
-            }
-            
-            const base64Content = buffer.toString('base64');
-            if (!base64Content || base64Content.length === 0) {
-              throw new Error(`Base64 content is empty for ticket ${ticket.ticketId}`);
-            }
-            
+            const buffer = Buffer.from(body);
             qrAttachments.push({
-              content: base64Content,
+              content: buffer.toString('base64'),
               filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
               type: 'image/png',
               disposition: 'attachment',
