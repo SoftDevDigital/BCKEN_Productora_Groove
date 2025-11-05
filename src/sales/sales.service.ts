@@ -787,79 +787,132 @@ Saludos,
 Equipo Groove Tickets
           `;
 
+          // Obtener URL del banner del evento y URL del portal
+          const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
+          const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+
           const emailHtmlBody = `
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Ticket gratuito</title>
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-    .free-badge { background: #4CAF50; color: white; padding: 10px 20px; border-radius: 25px; display: inline-block; font-weight: bold; font-size: 18px; margin: 20px 0; }
-    .details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
-    .detail-item { margin: 10px 0; padding: 8px 0; border-bottom: 1px solid #eee; }
-    .detail-item:last-child { border-bottom: none; }
-    .detail-label { font-weight: bold; color: #667eea; }
-    .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-    .highlight { color: #4CAF50; font-weight: bold; font-size: 20px; }
+    @media (prefers-color-scheme: dark) {
+      .bg { background-color: #0f172a !important; }
+      .card { background-color: #111827 !important; border-color: #1f2937 !important; }
+      .text { color: #e5e7eb !important; }
+      .muted { color: #9ca3af !important; }
+      .badge { background:#22c55e !important; color:#052e16 !important; }
+      .btn { background:#16a34a !important; }
+    }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; }
+      .px { padding-left:16px !important; padding-right:16px !important; }
+    }
+    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+    img { -ms-interpolation-mode:bicubic; }
   </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🎉 ¡Tienes un Ticket GRATUITO! 🎉</h1>
+<body style="margin:0; padding:0; background:#0b1220;" class="bg">
+  <center style="width:100%; background:#0b1220;">
+    <div style="max-width:600px; margin:0 auto;" class="container">
+      <table role="presentation" width="100%"><tr><td height="24"></td></tr></table>
+
+      <!-- Header con banner -->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" style="background:#121826; border-radius:12px;">
+              <tr>
+                <td style="padding:24px 24px 0; text-align:center">
+                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px;">
+                </td>
+              </tr>
+              <tr>
+                <td style="text-align:center;">
+                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:0 0 12px 12px;">
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Título + badge -->
+      <table role="presentation" width="100%">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" class="card" style="background:#0f172a; border:1px solid #1f2937; border-radius:12px;">
+              <tr>
+                <td style="padding:28px; text-align:left;">
+                  <h1 class="text" style="margin:0 0 8px; font-family:Arial,Helvetica,sans-serif; font-size:22px; color:#e5e7eb;">
+                    ¡Ticket GRATUITO para ${event?.name || 'tu evento'}! 🎁
+                  </h1>
+                  <div class="badge" style="display:inline-block; background:#22c55e; color:#052e16; font-weight:bold; padding:8px 12px; border-radius:999px; font-family:Arial,Helvetica,sans-serif; font-size:12px;">
+                    Cortesía de ${resellerName}
+                  </div>
+                  <p class="muted" style="margin:12px 0 0; font-family:Arial,Helvetica,sans-serif; color:#9ca3af; font-size:14px;">
+                    Hola <strong style="color:#e5e7eb;">${userName}</strong>, tu entrada es 100% gratis. ¡Nos vemos en el show!
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Detalles -->
+      <table role="presentation" width="100%">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <table role="presentation" width="100%" class="card" style="background:#0f172a; border:1px solid #1f2937; border-radius:12px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <table role="presentation" width="100%" style="font-family:Arial,Helvetica,sans-serif; font-size:14px;">
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Precio:</strong> <span style="color:#22c55e; font-weight:bold;">$0.00 (GRATIS)</span></td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td></tr>
+                  </table>
+
+                  <table role="presentation" width="100%"><tr><td style="border-top:1px solid #1f2937;" height="16"></td></tr></table>
+
+                  <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
+                    Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.
+                  </p>
+
+                  <a href="${ticketsPortalUrl}"
+                     class="btn"
+                     style="background:#16a34a; color:#ffffff; text-decoration:none; display:inline-block; padding:12px 18px; border-radius:8px; font-family:Arial,Helvetica,sans-serif; font-size:14px;">
+                     Ver mis tickets
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Footer -->
+      <table role="presentation" width="100%">
+        <tr><td height="16"></td></tr>
+        <tr>
+          <td class="px" style="padding:0 24px;">
+            <p class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; margin:12px 0 24px;">
+              © ${new Date().getFullYear()} Groove Tickets
+            </p>
+          </td>
+        </tr>
+      </table>
     </div>
-    <div class="content">
-      <p>Hola <strong>${userName}</strong>,</p>
-      
-      <div style="text-align: center;">
-        <div class="free-badge">🎁 TICKET GRATIS</div>
-      </div>
-      
-      <p style="font-size: 16px;">
-        Este ticket ha sido generado especialmente para ti por <strong>${resellerName}</strong>. 
-        <span class="highlight">¡Es completamente GRATIS!</span>
-      </p>
-      
-      <div class="details">
-        <h3 style="margin-top: 0; color: #667eea;">📋 Detalles del Ticket Gratuito</h3>
-        <div class="detail-item">
-          <span class="detail-label">Venta ID:</span> ${saleId}
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Evento:</span> ${event?.name || 'Desconocido'}
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Tanda:</span> ${batch?.name || 'Desconocida'}
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Cantidad de tickets:</span> ${sale.Item.quantity}
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Precio:</span> <span class="highlight">$0.00 (GRATIS) ✨</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Tickets:</span> ${ticketIds.join(', ')}
-        </div>
-      </div>
-      
-      <div class="details">
-        <h3 style="margin-top: 0; color: #667eea;">📱 Códigos QR Únicos</h3>
-        <p>Los códigos QR de tus tickets están adjuntos en este correo.</p>
-        <p><strong>Estos códigos QR son válidos y funcionan igual que los tickets pagos.</strong></p>
-      </div>
-      
-      <p style="text-align: center; font-size: 18px; margin-top: 30px;">
-        <strong>¡Disfruta del evento! 🎊</strong>
-      </p>
-      
-      <div class="footer">
-        <p>Saludos,<br><strong>Equipo Groove Tickets</strong></p>
-      </div>
-    </div>
-  </div>
+  </center>
 </body>
 </html>
           `;
