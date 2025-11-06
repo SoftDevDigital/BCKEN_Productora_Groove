@@ -305,7 +305,7 @@ Tu compra ha sido confirmada exitosamente.
 **Códigos QR Únicos**
 Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Gracias por tu compra!
-Equipo Groove Tickets
+Equipo FEST-GO
         `;
 
         // Obtener URL del banner del evento y URL del portal
@@ -354,15 +354,9 @@ Equipo Groove Tickets
           <td class="px" style="padding:0 24px;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#121826; border-radius:12px;">
               <tr>
-                <td style="padding:24px 24px 0 24px; text-align:center;">
-                  <!-- Logo (opcional) -->
-                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:0 0 12px 0; text-align:center;">
+                <td style="padding:24px 24px 12px 24px; text-align:center;">
                   <!-- Banner del evento -->
-                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:0 0 12px 12px;">
+                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:12px;">
                 </td>
               </tr>
             </table>
@@ -463,7 +457,7 @@ Equipo Groove Tickets
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
               <tr>
                 <td class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; padding:12px 0;">
-                  © ${new Date().getFullYear()} Groove Tickets · No responder a este email
+                  © ${new Date().getFullYear()} FEST-GO · No responder a este email
                 </td>
               </tr>
             </table>
@@ -955,7 +949,7 @@ Estos códigos QR son válidos y funcionan igual que los tickets pagos.
 ¡Disfruta del evento! 🎊
 
 Saludos,
-Equipo Groove Tickets
+Equipo FEST-GO
           `;
 
           // Obtener URL del banner del evento y URL del portal
@@ -998,13 +992,8 @@ Equipo Groove Tickets
           <td class="px" style="padding:0 24px;">
             <table role="presentation" width="100%" style="background:#121826; border-radius:12px;">
               <tr>
-                <td style="padding:24px 24px 0; text-align:center">
-                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px;">
-                </td>
-              </tr>
-              <tr>
-                <td style="text-align:center;">
-                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:0 0 12px 12px;">
+                <td style="padding:24px 24px 12px 24px; text-align:center;">
+                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:12px;">
                 </td>
               </tr>
             </table>
@@ -1077,7 +1066,7 @@ Equipo Groove Tickets
         <tr>
           <td class="px" style="padding:0 24px;">
             <p class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; margin:12px 0 24px;">
-              © ${new Date().getFullYear()} Groove Tickets
+              © ${new Date().getFullYear()} FEST-GO
             </p>
           </td>
         </tr>
