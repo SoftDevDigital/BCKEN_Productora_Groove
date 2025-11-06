@@ -312,6 +312,8 @@ Equipo Groove Tickets
         const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
         const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
         const userName = user.alias || user.email?.split('@')[0] || 'Usuario';
+        const logoUrl = this.configService.get<string>('EMAIL_LOGO_URL') || 
+          `https://${this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2'}.s3.amazonaws.com/logo/email-logo.png`;
 
         const emailHtmlBody = `
 <!DOCTYPE html>
@@ -355,8 +357,8 @@ Equipo Groove Tickets
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#121826; border-radius:12px;">
               <tr>
                 <td style="padding:24px 24px 0 24px; text-align:center;">
-                  <!-- Logo (opcional) -->
-                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
+                  <!-- Logo -->
+                  <img src="${logoUrl}" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
                 </td>
               </tr>
               <tr>
@@ -961,6 +963,8 @@ Equipo Groove Tickets
           // Obtener URL del banner del evento y URL del portal
           const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
           const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
+          const logoUrl = this.configService.get<string>('EMAIL_LOGO_URL') || 
+            `https://${this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2'}.s3.amazonaws.com/logo/email-logo.png`;
 
           const emailHtmlBody = `
 <!DOCTYPE html>
@@ -999,7 +1003,7 @@ Equipo Groove Tickets
             <table role="presentation" width="100%" style="background:#121826; border-radius:12px;">
               <tr>
                 <td style="padding:24px 24px 0; text-align:center">
-                  <img src="https://placehold.co/140x36?text=GROOVE" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px;">
+                  <img src="${logoUrl}" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px;">
                 </td>
               </tr>
               <tr>
