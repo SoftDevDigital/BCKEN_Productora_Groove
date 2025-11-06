@@ -780,11 +780,25 @@ Equipo FEST-GO
         batch = { name: 'Tanda' }; // Valor por defecto para el email
       }
 
-      // 3. Crear tickets
+      // 3. Obtener datos del evento antes de crear tickets (para el nombre en el QR)
+      let user, event;
+      try {
+        user = await this.usersService.getUserProfile(sale.Item.userId);
+        event = await this.eventsService.findOne(sale.Item.eventId);
+        // batch ya fue obtenido arriba, reutilizarlo
+      } catch (dataError: any) {
+        console.error('Error al obtener datos del evento:', dataError.message);
+        // Continuar con valores por defecto
+        if (!user) user = { email: '', alias: 'Usuario' };
+        if (!event) event = { name: 'Evento' };
+        if (!batch) batch = { name: 'Tanda' };
+      }
+
+      // 4. Crear tickets con diseño mejorado para QR free
       let tickets;
       let ticketIds: string[] = [];
       try {
-        console.log('Creando tickets para venta gratis:', { saleId, isVip });
+        console.log('Creando tickets para venta gratis:', { saleId, isVip, eventName: event?.name });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -792,6 +806,8 @@ Equipo FEST-GO
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
+          isFree: true, // Marcar como ticket gratis para usar diseño especial
+          eventName: event?.name, // Pasar nombre del evento para el QR
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
       } catch (ticketsError: any) {
@@ -802,7 +818,7 @@ Equipo FEST-GO
         );
       }
 
-      // 4. Actualizar tickets del usuario
+      // 5. Actualizar tickets del usuario
       try {
         console.log('Actualizando tickets de usuario:', {
           userId: sale.Item.userId,
@@ -818,20 +834,6 @@ Equipo FEST-GO
         console.error('Error al actualizar tickets del usuario:', updateError.message);
         // No lanzar error aquí, continuar con el email aunque falle la actualización
         console.warn('La venta y tickets se crearon, pero falló la actualización de contadores');
-      }
-
-      // 5. Obtener datos para el email
-      let user, event;
-      try {
-        user = await this.usersService.getUserProfile(sale.Item.userId);
-        event = await this.eventsService.findOne(sale.Item.eventId);
-        // batch ya fue obtenido arriba, reutilizarlo
-      } catch (dataError: any) {
-        console.error('Error al obtener datos para el email:', dataError.message);
-        // Continuar con valores por defecto
-        if (!user) user = { email: '', alias: 'Usuario' };
-        if (!event) event = { name: 'Evento' };
-        if (!batch) batch = { name: 'Tanda' };
       }
 
       // 6. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)

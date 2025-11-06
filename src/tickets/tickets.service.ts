@@ -38,6 +38,8 @@ export class TicketsService {
     batchId: string;
     quantity: number;
     isVip?: boolean;
+    isFree?: boolean;
+    eventName?: string;
   }) {
     const tickets: Array<{
       ticketId: string;
@@ -55,6 +57,9 @@ export class TicketsService {
       if (sale.isVip) {
         // Generar QR VIP con diseño personalizado
         qrImageBuffer = await this.generateVipQr(qrData);
+      } else if (sale.isFree) {
+        // Generar QR Free con diseño personalizado mejorado
+        qrImageBuffer = await this.generateFreeQr(qrData, ticketId, sale.eventName);
       } else {
         // QR normal
         qrImageBuffer = await QRCode.toBuffer(qrData, { 
@@ -70,6 +75,8 @@ export class TicketsService {
       
       const qrKey = sale.isVip 
         ? `qrs/vip/ticket-${ticketId}-${uuidv4()}.png`
+        : sale.isFree
+        ? `qrs/free/ticket-${ticketId}-${uuidv4()}.png`
         : `qrs/ticket-${ticketId}-${uuidv4()}.png`;
       
       await this.s3Client.send(
@@ -202,6 +209,163 @@ export class TicketsService {
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR VIP, usando QR normal:', error);
+      // Fallback a QR normal si hay error
+      return await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: 512,
+        margin: 2,
+      });
+    }
+  }
+
+  private async generateFreeQr(
+    qrData: string,
+    ticketId: string,
+    eventName?: string,
+  ): Promise<Buffer> {
+    try {
+      // Generar QR base con colores modernos
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: 600,
+        margin: 2,
+        color: {
+          dark: '#000000', // Negro para el QR
+          light: '#FFFFFF', // Blanco de fondo
+        },
+        errorCorrectionLevel: 'H', // Alto nivel de corrección
+      });
+
+      // Crear canvas para agregar diseño profesional
+      const padding = 50;
+      const headerHeight = 80;
+      const footerHeight = 100;
+      const qrSize = 600;
+      const canvasWidth = qrSize + (padding * 2);
+      const canvasHeight = qrSize + (padding * 2) + headerHeight + footerHeight;
+
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Fondo degradado moderno (verde/azul para "gratis")
+      const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
+      gradient.addColorStop(0, '#10b981'); // Verde esmeralda
+      gradient.addColorStop(0.3, '#3b82f6'); // Azul
+      gradient.addColorStop(0.7, '#8b5cf6'); // Púrpura
+      gradient.addColorStop(1, '#ec4899'); // Rosa
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // Borde decorativo externo con sombra
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(10, 10, canvasWidth - 20, canvasHeight - 20);
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Borde interno
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(25, 25, canvasWidth - 50, canvasHeight - 50);
+
+      // Fondo blanco para el área del QR
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(padding, padding + headerHeight, qrSize, qrSize);
+
+      // Cargar QR como imagen
+      const qrImage = await loadImage(qrBuffer);
+
+      // Agregar QR en el centro
+      const qrX = padding;
+      const qrY = padding + headerHeight;
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // === HEADER: Nombre del evento ===
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 32px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Sombra del texto del evento
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+
+      const eventText = eventName || 'FEST-GO';
+      // Truncar texto si es muy largo
+      const maxEventLength = 30;
+      const displayEventName =
+        eventText.length > maxEventLength
+          ? eventText.substring(0, maxEventLength) + '...'
+          : eventText;
+
+      ctx.fillText(displayEventName, canvasWidth / 2, padding + headerHeight / 2);
+
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Badge "GRATIS" en el header
+      const badgeWidth = 120;
+      const badgeHeight = 35;
+      const badgeX = canvasWidth / 2 - badgeWidth / 2;
+      const badgeY = padding + headerHeight / 2 + 25;
+
+      // Fondo del badge
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+
+      // Borde del badge
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
+
+      // Texto del badge
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px Arial';
+      ctx.fillText('GRATIS', canvasWidth / 2, badgeY + badgeHeight / 2 + 6);
+
+      // === FOOTER: ID del ticket ===
+      const footerY = padding + headerHeight + qrSize + 20;
+
+      // Fondo semi-transparente para el footer
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.fillRect(padding + 50, footerY, qrSize - 100, footerHeight - 20);
+
+      // Borde del footer
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(padding + 50, footerY, qrSize - 100, footerHeight - 20);
+
+      // Texto "Ticket ID"
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Ticket ID', canvasWidth / 2, footerY + 25);
+
+      // ID del ticket (más grande y destacado)
+      ctx.fillStyle = '#1f2937';
+      ctx.font = 'bold 28px "Courier New", monospace';
+      ctx.fillText(ticketId.toUpperCase(), canvasWidth / 2, footerY + 60);
+
+      // Texto "FEST-GO" en la parte inferior
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '12px Arial';
+      ctx.fillText('FEST-GO', canvasWidth / 2, footerY + 85);
+
+      // Convertir canvas a buffer
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR Free, usando QR normal:', error);
       // Fallback a QR normal si hay error
       return await QRCode.toBuffer(qrData, {
         type: 'png',
