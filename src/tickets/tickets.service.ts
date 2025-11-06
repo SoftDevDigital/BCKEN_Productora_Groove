@@ -288,7 +288,8 @@ export class TicketsService {
 
       // === HEADER: Nombre del evento ===
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 32px Arial';
+      // Usar fuente sans-serif genérica que soporte UTF-8 mejor
+      ctx.font = 'bold 32px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -306,6 +307,8 @@ export class TicketsService {
           ? eventText.substring(0, maxEventLength) + '...'
           : eventText;
 
+      // Usar measureText para centrar mejor
+      const eventTextMetrics = ctx.measureText(displayEventName);
       ctx.fillText(displayEventName, canvasWidth / 2, padding + headerHeight / 2);
 
       // Resetear sombra
@@ -331,7 +334,7 @@ export class TicketsService {
 
       // Texto del badge
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px Arial';
+      ctx.font = 'bold 18px sans-serif';
       ctx.fillText('GRATIS', canvasWidth / 2, badgeY + badgeHeight / 2 + 6);
 
       // === FOOTER: ID del ticket ===
@@ -348,18 +351,18 @@ export class TicketsService {
 
       // Texto "Ticket ID"
       ctx.fillStyle = '#6b7280';
-      ctx.font = '14px Arial';
+      ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Ticket ID', canvasWidth / 2, footerY + 25);
 
       // ID del ticket (más grande y destacado)
       ctx.fillStyle = '#1f2937';
-      ctx.font = 'bold 28px "Courier New", monospace';
+      ctx.font = 'bold 28px monospace';
       ctx.fillText(ticketId.toUpperCase(), canvasWidth / 2, footerY + 60);
 
-      // Texto "FEST-GO" en la parte inferior
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '12px Arial';
+      // Texto "FEST-GO" en la parte inferior - COLOR PÚRPURA OSCURO
+      ctx.fillStyle = '#6B21A8'; // Púrpura oscuro
+      ctx.font = 'bold 12px sans-serif';
       ctx.fillText('FEST-GO', canvasWidth / 2, footerY + 85);
 
       // Convertir canvas a buffer
