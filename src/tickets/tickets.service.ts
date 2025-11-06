@@ -224,146 +224,100 @@ export class TicketsService {
     eventName?: string,
   ): Promise<Buffer> {
     try {
-      // Generar QR base con colores modernos
+      // Generar QR base - más grande para mejor calidad
+      const qrSize = 800;
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
-        width: 600,
-        margin: 2,
+        width: qrSize,
+        margin: 4,
         color: {
-          dark: '#000000', // Negro para el QR
-          light: '#FFFFFF', // Blanco de fondo
+          dark: '#000000',
+          light: '#FFFFFF',
         },
-        errorCorrectionLevel: 'H', // Alto nivel de corrección
+        errorCorrectionLevel: 'H',
       });
 
-      // Crear canvas para agregar diseño profesional
-      const padding = 50;
-      const headerHeight = 80;
-      const footerHeight = 100;
-      const qrSize = 600;
-      const canvasWidth = qrSize + (padding * 2);
-      const canvasHeight = qrSize + (padding * 2) + headerHeight + footerHeight;
+      // Diseño minimalista y profesional
+      const framePadding = 60; // Padding para el marco
+      const qrPadding = 40; // Padding interno del QR
+      const textAreaHeight = 80; // Área para texto inferior
+      const canvasWidth = qrSize + (framePadding * 2);
+      const canvasHeight = qrSize + (framePadding * 2) + textAreaHeight;
 
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
-      // Fondo degradado moderno (verde/azul para "gratis")
-      const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
-      gradient.addColorStop(0, '#10b981'); // Verde esmeralda
-      gradient.addColorStop(0.3, '#3b82f6'); // Azul
-      gradient.addColorStop(0.7, '#8b5cf6'); // Púrpura
-      gradient.addColorStop(1, '#ec4899'); // Rosa
-      ctx.fillStyle = gradient;
+      // Fondo blanco limpio (minimalista)
+      ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-      // Borde decorativo externo con sombra
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 5;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 8;
-      ctx.strokeRect(10, 10, canvasWidth - 20, canvasHeight - 20);
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      // Marco profesional púrpura oscuro alrededor del QR
+      const frameWidth = 6;
+      const frameColor = '#6B21A8'; // Púrpura oscuro
+      
+      // Marco externo
+      ctx.strokeStyle = frameColor;
+      ctx.lineWidth = frameWidth;
+      ctx.strokeRect(
+        framePadding - qrPadding,
+        framePadding - qrPadding,
+        qrSize + (qrPadding * 2),
+        qrSize + (qrPadding * 2),
+      );
 
-      // Borde interno
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(25, 25, canvasWidth - 50, canvasHeight - 50);
+      // Marco interno (doble línea para elegancia)
+      ctx.strokeStyle = frameColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        framePadding - qrPadding + 10,
+        framePadding - qrPadding + 10,
+        qrSize + (qrPadding * 2) - 20,
+        qrSize + (qrPadding * 2) - 20,
+      );
 
-      // Fondo blanco para el área del QR
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(padding, padding + headerHeight, qrSize, qrSize);
-
-      // Cargar QR como imagen
+      // Cargar y dibujar QR
       const qrImage = await loadImage(qrBuffer);
-
-      // Agregar QR en el centro
-      const qrX = padding;
-      const qrY = padding + headerHeight;
+      const qrX = framePadding;
+      const qrY = framePadding;
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // === HEADER: Nombre del evento ===
-      ctx.fillStyle = '#ffffff';
-      // Usar fuente sans-serif genérica que soporte UTF-8 mejor
-      ctx.font = 'bold 32px sans-serif';
+      // Área de texto inferior - minimalista
+      const textY = framePadding + qrSize + 30;
+      
+      // Asegurar que el ticketId solo contenga caracteres ASCII válidos
+      const cleanTicketId = ticketId
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, ''); // Solo letras y números
+      
+      // ID del ticket - usar fuente monospace del sistema
+      ctx.fillStyle = '#1a1a1a';
+      // Usar fuente monospace genérica que funciona en todos los sistemas
+      ctx.font = '36px "Courier New", Courier, monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      
+      // Verificar que el texto se puede renderizar antes de dibujarlo
+      try {
+        ctx.fillText(cleanTicketId, canvasWidth / 2, textY);
+      } catch (textError) {
+        console.error('Error renderizando ticketId, usando fallback:', textError);
+        // Fallback: solo números si hay problema
+        const numericId = cleanTicketId.replace(/[^0-9]/g, '') || 'TICKET';
+        ctx.fillText(numericId, canvasWidth / 2, textY);
+      }
 
-      // Sombra del texto del evento
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
-
-      const eventText = eventName || 'FEST-GO';
-      // Truncar texto si es muy largo
-      const maxEventLength = 30;
-      const displayEventName =
-        eventText.length > maxEventLength
-          ? eventText.substring(0, maxEventLength) + '...'
-          : eventText;
-
-      // Usar measureText para centrar mejor
-      const eventTextMetrics = ctx.measureText(displayEventName);
-      ctx.fillText(displayEventName, canvasWidth / 2, padding + headerHeight / 2);
-
-      // Resetear sombra
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
-      // Badge "GRATIS" en el header
-      const badgeWidth = 120;
-      const badgeHeight = 35;
-      const badgeX = canvasWidth / 2 - badgeWidth / 2;
-      const badgeY = padding + headerHeight / 2 + 25;
-
-      // Fondo del badge
-      ctx.fillStyle = '#22c55e';
-      ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
-
-      // Borde del badge
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
-
-      // Texto del badge
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText('GRATIS', canvasWidth / 2, badgeY + badgeHeight / 2 + 6);
-
-      // === FOOTER: ID del ticket ===
-      const footerY = padding + headerHeight + qrSize + 20;
-
-      // Fondo semi-transparente para el footer
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-      ctx.fillRect(padding + 50, footerY, qrSize - 100, footerHeight - 20);
-
-      // Borde del footer
-      ctx.strokeStyle = '#e5e7eb';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(padding + 50, footerY, qrSize - 100, footerHeight - 20);
-
-      // Texto "Ticket ID"
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Ticket ID', canvasWidth / 2, footerY + 25);
-
-      // ID del ticket (más grande y destacado)
-      ctx.fillStyle = '#1f2937';
-      ctx.font = 'bold 28px monospace';
-      ctx.fillText(ticketId.toUpperCase(), canvasWidth / 2, footerY + 60);
-
-      // Texto "FEST-GO" en la parte inferior - COLOR PÚRPURA OSCURO
+      // Texto "FEST-GO" - púrpura oscuro, minimalista
+      // Usar solo caracteres ASCII básicos
       ctx.fillStyle = '#6B21A8'; // Púrpura oscuro
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText('FEST-GO', canvasWidth / 2, footerY + 85);
+      ctx.font = '18px "Courier New", Courier, monospace';
+      
+      try {
+        ctx.fillText('FEST-GO', canvasWidth / 2, textY + 40);
+      } catch (textError) {
+        console.error('Error renderizando FEST-GO:', textError);
+        // Fallback sin guión si hay problema
+        ctx.fillText('FESTGO', canvasWidth / 2, textY + 40);
+      }
 
       // Convertir canvas a buffer
       return canvas.toBuffer('image/png');
