@@ -9,9 +9,7 @@ import {
   UpdateCommandInput,
   ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import * as fs from 'fs';
-import * as path from 'path';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateFreeSaleDto } from './dto/create-free-sale.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -307,38 +305,15 @@ Tu compra ha sido confirmada exitosamente.
 **Códigos QR Únicos**
 Los códigos QR de tus tickets están adjuntos en este correo.
 ¡Gracias por tu compra!
-Equipo FEST-GO
+Equipo Groove Tickets
         `;
 
         // Obtener URL del banner del evento y URL del portal
         const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
         const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
         const userName = user.alias || user.email?.split('@')[0] || 'Usuario';
-        
-        // Leer logo del archivo local y adjuntarlo como imagen embebida
-        let logoAttachment: any = null;
-        let logoContentId = 'email-logo';
-        try {
-          const logoPath = path.join(process.cwd(), 'public', 'img', 'email-logo.png');
-          if (fs.existsSync(logoPath)) {
-            const logoBuffer = fs.readFileSync(logoPath);
-            logoAttachment = {
-              content: logoBuffer.toString('base64'),
-              filename: 'email-logo.png',
-              type: 'image/png',
-              disposition: 'inline',
-              contentId: logoContentId,
-            };
-            console.log('Logo encontrado y adjuntado como imagen embebida');
-          } else {
-            console.warn('Logo no encontrado en:', logoPath);
-          }
-        } catch (logoError: any) {
-          console.error('Error al leer el logo:', logoError.message);
-        }
-        
-        // Combinar logo con QRs en attachments
-        const allAttachments = logoAttachment ? [logoAttachment, ...qrAttachments] : qrAttachments;
+        const logoUrl = this.configService.get<string>('EMAIL_LOGO_URL') || 
+          `https://${this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2'}.s3.amazonaws.com/logo/email-logo.png`;
 
         const emailHtmlBody = `
 <!DOCTYPE html>
@@ -383,7 +358,7 @@ Equipo FEST-GO
               <tr>
                 <td style="padding:24px 24px 0 24px; text-align:center;">
                   <!-- Logo -->
-                  <img src="cid:${logoContentId}" alt="FEST-GO" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
+                  <img src="${logoUrl}" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px; border:0; outline:none;">
                 </td>
               </tr>
               <tr>
@@ -490,7 +465,7 @@ Equipo FEST-GO
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
               <tr>
                 <td class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; padding:12px 0;">
-                  © ${new Date().getFullYear()} FEST-GO · No responder a este email
+                  © ${new Date().getFullYear()} Groove Tickets · No responder a este email
                 </td>
               </tr>
             </table>
@@ -509,7 +484,7 @@ Equipo FEST-GO
           user.email,
           `Confirmación de Compra - ${event?.name || 'Evento'}`,
           emailBody,
-          allAttachments,
+          qrAttachments,
           emailHtmlBody,
         );
         console.log('Email enviado exitosamente');
@@ -982,37 +957,14 @@ Estos códigos QR son válidos y funcionan igual que los tickets pagos.
 ¡Disfruta del evento! 🎊
 
 Saludos,
-Equipo FEST-GO
+Equipo Groove Tickets
           `;
 
           // Obtener URL del banner del evento y URL del portal
           const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
           const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
-          
-          // Leer logo del archivo local y adjuntarlo como imagen embebida
-          let logoAttachment: any = null;
-          let logoContentId = 'email-logo';
-          try {
-            const logoPath = path.join(process.cwd(), 'public', 'img', 'email-logo.png');
-            if (fs.existsSync(logoPath)) {
-              const logoBuffer = fs.readFileSync(logoPath);
-              logoAttachment = {
-                content: logoBuffer.toString('base64'),
-                filename: 'email-logo.png',
-                type: 'image/png',
-                disposition: 'inline',
-                contentId: logoContentId,
-              };
-              console.log('Logo encontrado y adjuntado como imagen embebida (ticket gratis)');
-            } else {
-              console.warn('Logo no encontrado en:', logoPath);
-            }
-          } catch (logoError: any) {
-            console.error('Error al leer el logo:', logoError.message);
-          }
-          
-          // Combinar logo con QRs en attachments
-          const allAttachments = logoAttachment ? [logoAttachment, ...qrAttachments] : qrAttachments;
+          const logoUrl = this.configService.get<string>('EMAIL_LOGO_URL') || 
+            `https://${this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2'}.s3.amazonaws.com/logo/email-logo.png`;
 
           const emailHtmlBody = `
 <!DOCTYPE html>
@@ -1051,7 +1003,7 @@ Equipo FEST-GO
             <table role="presentation" width="100%" style="background:#121826; border-radius:12px;">
               <tr>
                 <td style="padding:24px 24px 0; text-align:center">
-                  <img src="cid:${logoContentId}" alt="FEST-GO" width="140" height="36" style="display:block; margin:0 auto 12px;">
+                  <img src="${logoUrl}" alt="Groove Tickets" width="140" height="36" style="display:block; margin:0 auto 12px;">
                 </td>
               </tr>
               <tr>
@@ -1129,7 +1081,7 @@ Equipo FEST-GO
         <tr>
           <td class="px" style="padding:0 24px;">
             <p class="muted" style="text-align:center; color:#9ca3af; font-family:Arial,Helvetica,sans-serif; font-size:12px; margin:12px 0 24px;">
-              © ${new Date().getFullYear()} FEST-GO
+              © ${new Date().getFullYear()} Groove Tickets
             </p>
           </td>
         </tr>
@@ -1145,7 +1097,7 @@ Equipo FEST-GO
             userEmail,
             `🎁 Ticket Gratuito - ${event?.name || 'Evento'}`,
             emailBody,
-            allAttachments,
+            qrAttachments,
             emailHtmlBody,
           );
           console.log('Email de ticket gratis enviado exitosamente');
