@@ -308,8 +308,7 @@ Los códigos QR de tus tickets están adjuntos en este correo.
 Equipo FEST-GO
         `;
 
-        // Obtener URL del banner del evento y URL del portal
-        const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
+        // Obtener URL del portal
         const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
         const userName = user.alias || user.email?.split('@')[0] || 'Usuario';
 
@@ -348,21 +347,6 @@ Equipo FEST-GO
         <tr><td height="24"></td></tr>
       </table>
 
-      <!-- Header -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-        <tr>
-          <td class="px" style="padding:0 24px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#121826; border-radius:12px;">
-              <tr>
-                <td style="padding:24px 24px 12px 24px; text-align:center;">
-                  <!-- Banner del evento -->
-                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:12px;">
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
 
       <!-- Title Card -->
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
@@ -952,8 +936,7 @@ Saludos,
 Equipo FEST-GO
           `;
 
-          // Obtener URL del banner del evento y URL del portal
-          const eventBannerUrl = event?.imageUrl || 'https://placehold.co/560x220';
+          // Obtener URL del portal
           const ticketsPortalUrl = this.configService.get<string>('FRONTEND_BASE_URL') || 'https://fest-go.com';
 
           const emailHtmlBody = `
@@ -986,20 +969,6 @@ Equipo FEST-GO
     <div style="max-width:600px; margin:0 auto;" class="container">
       <table role="presentation" width="100%"><tr><td height="24"></td></tr></table>
 
-      <!-- Header con banner -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-        <tr>
-          <td class="px" style="padding:0 24px;">
-            <table role="presentation" width="100%" style="background:#121826; border-radius:12px;">
-              <tr>
-                <td style="padding:24px 24px 12px 24px; text-align:center;">
-                  <img src="${eventBannerUrl}" alt="${event?.name || 'Evento'}" width="560" style="width:100%; max-width:560px; height:auto; display:block; border:0; border-radius:12px;">
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
 
       <!-- Título + badge -->
       <table role="presentation" width="100%">
