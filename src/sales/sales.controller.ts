@@ -56,6 +56,16 @@ export class SalesController {
     }
   }
 
+  private ensureAdmin(claims: any) {
+    const userRole = claims?.['custom:role'] || claims?.role || 'User';
+    if (userRole !== 'Admin') {
+      throw new HttpException(
+        'No autorizado: Requiere rol Admin',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
   @Post()
   @UsePipes(new ValidationPipe({ transform: true }))
   async createDirect(@Body() dto: CreateSaleDto, @Req() req: Request) {
@@ -147,19 +157,19 @@ export class SalesController {
     }
   }
 
-  @Post('reseller/free')
+  @Post('admin/free')
   @UsePipes(new ValidationPipe({ transform: true }))
   async createFreeTicket(@Body() dto: CreateFreeSaleDto, @Req() req: Request) {
     try {
       const claims = this.getClaims(req);
       
       try {
-        this.ensureReseller(claims);
+        this.ensureAdmin(claims);
       } catch (authError: any) {
         console.error('Error de autorización:', authError.message);
         return {
           statusCode: HttpStatus.FORBIDDEN,
-          message: authError.message || 'No autorizado: Requiere rol Reseller',
+          message: authError.message || 'No autorizado: Requiere rol Admin',
           error: 'FORBIDDEN',
         };
       }
