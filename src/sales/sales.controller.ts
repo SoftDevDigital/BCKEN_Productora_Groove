@@ -164,8 +164,7 @@ export class SalesController {
       const claims = this.getClaims(req);
       
       try {
-        // TEMPORAL: Permitir Reseller para probar renderizado de QR
-        this.ensureReseller(claims);
+        this.ensureAdmin(claims);
       } catch (authError: any) {
         console.error('Error de autorización:', authError.message);
         return {
