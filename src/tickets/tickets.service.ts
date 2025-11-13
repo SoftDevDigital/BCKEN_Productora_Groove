@@ -224,7 +224,7 @@ export class TicketsService {
     eventName?: string,
   ): Promise<Buffer> {
     try {
-      // Generar QR base - más grande para mejor calidad
+      // Generar QR base - alta calidad
       const qrSize = 800;
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
@@ -237,99 +237,179 @@ export class TicketsService {
         errorCorrectionLevel: 'H',
       });
 
-      // Diseño minimalista y profesional
-      const framePadding = 60; // Padding para el marco
-      const qrPadding = 40; // Padding interno del QR
-      const textAreaHeight = 80; // Área para texto inferior
-      const canvasWidth = qrSize + (framePadding * 2);
-      const canvasHeight = qrSize + (framePadding * 2) + textAreaHeight;
+      // Dimensiones del canvas con diseño atractivo
+      const topBannerHeight = 120;
+      const bottomAreaHeight = 140;
+      const sideMargin = 80;
+      const qrAreaPadding = 60;
+      
+      const canvasWidth = qrSize + (sideMargin * 2);
+      const canvasHeight = topBannerHeight + qrSize + (qrAreaPadding * 2) + bottomAreaHeight;
 
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
-      // Fondo blanco limpio (minimalista)
-      ctx.fillStyle = '#FFFFFF';
+      // === FONDO PRINCIPAL ===
+      // Gradiente de fondo elegante
+      const bgGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      bgGradient.addColorStop(0, '#f8fafc'); // Gris muy claro arriba
+      bgGradient.addColorStop(0.3, '#ffffff'); // Blanco en el medio
+      bgGradient.addColorStop(1, '#f1f5f9'); // Gris suave abajo
+      ctx.fillStyle = bgGradient;
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-      // Marco profesional púrpura oscuro alrededor del QR
-      const frameWidth = 6;
-      const frameColor = '#6B21A8'; // Púrpura oscuro
-      
-      // Marco externo
-      ctx.strokeStyle = frameColor;
-      ctx.lineWidth = frameWidth;
-      ctx.strokeRect(
-        framePadding - qrPadding,
-        framePadding - qrPadding,
-        qrSize + (qrPadding * 2),
-        qrSize + (qrPadding * 2),
-      );
+      // === BANNER SUPERIOR ===
+      // Gradiente del banner (atractivo y moderno)
+      const bannerGradient = ctx.createLinearGradient(0, 0, canvasWidth, topBannerHeight);
+      bannerGradient.addColorStop(0, '#8b5cf6'); // Púrpura vibrante
+      bannerGradient.addColorStop(0.5, '#a855f7'); // Púrpura medio
+      bannerGradient.addColorStop(1, '#7c3aed'); // Púrpura oscuro
+      ctx.fillStyle = bannerGradient;
+      ctx.fillRect(0, 0, canvasWidth, topBannerHeight);
 
-      // Marco interno (doble línea para elegancia)
-      ctx.strokeStyle = frameColor;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        framePadding - qrPadding + 10,
-        framePadding - qrPadding + 10,
-        qrSize + (qrPadding * 2) - 20,
-        qrSize + (qrPadding * 2) - 20,
-      );
+      // Elementos decorativos en el banner
+      // Círculos decorativos
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.beginPath();
+      ctx.arc(60, 30, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(canvasWidth - 60, 30, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(canvasWidth - 40, 90, 15, 0, Math.PI * 2);
+      ctx.fill();
 
-      // Cargar y dibujar QR
-      const qrImage = await loadImage(qrBuffer);
-      const qrX = framePadding;
-      const qrY = framePadding;
-      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
-
-      // Área de texto inferior - minimalista
-      const textY = framePadding + qrSize + 30;
-      
-      // Asegurar que el ticketId solo contenga caracteres ASCII válidos
-      const cleanTicketId = ticketId
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, ''); // Solo letras y números
-      
-      // ID del ticket - usar fuente monospace del sistema
-      ctx.fillStyle = '#1a1a1a';
-      // Usar fuente monospace genérica que funciona en todos los sistemas
-      ctx.font = '36px "Courier New", Courier, monospace';
+      // Texto "ENTRADA GRATUITA" en el banner
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Verificar que el texto se puede renderizar antes de dibujarlo
-      try {
-        ctx.fillText(cleanTicketId, canvasWidth / 2, textY);
-      } catch (textError) {
-        console.error('Error renderizando ticketId, usando fallback:', textError);
-        // Fallback: solo números si hay problema
-        const numericId = cleanTicketId.replace(/[^0-9]/g, '') || 'TICKET';
-        ctx.fillText(numericId, canvasWidth / 2, textY);
-      }
-
-      // Texto "FEST-GO" - púrpura oscuro, minimalista
-      // Usar solo caracteres ASCII básicos
-      ctx.fillStyle = '#6B21A8'; // Púrpura oscuro
-      ctx.font = '18px "Courier New", Courier, monospace';
+      // Sombra del texto principal
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
       
-      try {
-        ctx.fillText('FEST-GO', canvasWidth / 2, textY + 40);
-      } catch (textError) {
-        console.error('Error renderizando FEST-GO:', textError);
-        // Fallback sin guión si hay problema
-        ctx.fillText('FESTGO', canvasWidth / 2, textY + 40);
+      ctx.fillText('🎫 ENTRADA GRATUITA', canvasWidth / 2, 45);
+      
+      // Subtítulo del evento
+      if (eventName) {
+        ctx.font = 'bold 24px Arial';
+        ctx.fillStyle = '#e0e7ff'; // Púrpura muy claro
+        this.wrapAndFillText(ctx, eventName, canvasWidth / 2, 85, canvasWidth - 40, 26);
+      } else {
+        ctx.font = '20px Arial';
+        ctx.fillStyle = '#e0e7ff';
+        ctx.fillText('FEST-GO EVENT', canvasWidth / 2, 85);
       }
 
-      // Convertir canvas a buffer
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // === ÁREA DEL QR ===
+      const qrStartY = topBannerHeight + qrAreaPadding;
+      
+      // Contenedor del QR con sombra elegante
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 10;
+      
+      // Contenedor redondeado para el QR
+      this.roundRect(ctx, sideMargin - 20, qrStartY - 20, qrSize + 40, qrSize + 40, 15);
+      ctx.fill();
+      
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Marco decorativo alrededor del QR
+      const frameGradient = ctx.createLinearGradient(0, qrStartY, 0, qrStartY + qrSize);
+      frameGradient.addColorStop(0, '#8b5cf6');
+      frameGradient.addColorStop(1, '#7c3aed');
+      ctx.strokeStyle = frameGradient;
+      ctx.lineWidth = 4;
+      this.roundRect(ctx, sideMargin - 15, qrStartY - 15, qrSize + 30, qrSize + 30, 12);
+      ctx.stroke();
+
+      // Dibujar el QR centrado
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, sideMargin, qrStartY, qrSize, qrSize);
+
+      // === ÁREA INFERIOR ===
+      const bottomStartY = qrStartY + qrSize + 40;
+      
+      // Fondo del área inferior con gradiente sutil
+      const bottomGradient = ctx.createLinearGradient(0, bottomStartY, 0, bottomStartY + bottomAreaHeight);
+      bottomGradient.addColorStop(0, 'rgba(139, 92, 246, 0.05)');
+      bottomGradient.addColorStop(1, 'rgba(124, 58, 237, 0.1)');
+      ctx.fillStyle = bottomGradient;
+      this.roundRect(ctx, 20, bottomStartY - 10, canvasWidth - 40, bottomAreaHeight - 20, 10);
+      ctx.fill();
+
+      // ID del ticket con estilo atractivo
+      const cleanTicketId = ticketId
+        .toUpperCase()
+        .split('')
+        .filter((c) => /[A-Z0-9]/.test(c))
+        .join('');
+
+      // Etiqueta "CÓDIGO DE ENTRADA"
+      ctx.fillStyle = '#6b7280';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('CÓDIGO DE ENTRADA', canvasWidth / 2, bottomStartY + 25);
+
+      // ID del ticket principal
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 48px "Courier New", Courier, monospace';
+      ctx.fillText(cleanTicketId, canvasWidth / 2, bottomStartY + 70);
+
+      // Línea decorativa
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(canvasWidth * 0.25, bottomStartY + 90);
+      ctx.lineTo(canvasWidth * 0.75, bottomStartY + 90);
+      ctx.stroke();
+
+      // Marca y mensaje final
+      ctx.fillStyle = '#8b5cf6';
+      ctx.font = 'bold 20px Arial';
+      ctx.fillText('FEST-GO', canvasWidth / 2, bottomStartY + 115);
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '14px Arial';
+      ctx.fillText('¡Presenta este código en el evento!', canvasWidth / 2, bottomStartY + 135);
+
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR Free, usando QR normal:', error);
-      // Fallback a QR normal si hay error
-      return await QRCode.toBuffer(qrData, {
-        type: 'png',
-        width: 512,
-        margin: 2,
-      });
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 512, margin: 2 });
     }
+  }
+
+  // Función auxiliar para dibujar rectángulos redondeados
+  private roundRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
   }
 
   async validateTicket(ticketId: string) {
@@ -511,6 +591,29 @@ export class TicketsService {
       console.error('Error al contar total de escaneos:', error);
       // Retornar 0 si hay error para no romper nada
       return 0;
+    }
+  }
+
+  private wrapAndFillText(ctx: any, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
+    // Simple word-wrap and fill centered lines around y
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let current = '';
+    for (const w of words) {
+      const test = current ? `${current} ${w}` : w;
+      const metrics = ctx.measureText(test);
+      if (metrics.width > maxWidth && current) {
+        lines.push(current);
+        current = w;
+      } else {
+        current = test;
+      }
+    }
+    if (current) lines.push(current);
+
+    const startY = y - ((lines.length - 1) * lineHeight) / 2;
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], x, startY + i * lineHeight);
     }
   }
 }
