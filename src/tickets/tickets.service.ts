@@ -12,7 +12,7 @@ import * as QRCode from 'qrcode';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
-import { createCanvas, loadImage } from 'canvas';
+import { createCanvas, loadImage, registerFont } from 'canvas';
 
 @Injectable()
 export class TicketsService {
@@ -244,6 +244,15 @@ export class TicketsService {
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
+      // Configurar fuente por defecto del canvas para evitar problemas
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Título principal - usando fuente básica y tamaño grande
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px Arial, sans-serif';  
+      ctx.fillText('ENTRADA GRATUITA', canvasWidth / 2, 40);
+
       // === FONDO PRINCIPAL CON GRADIENTE OSCURO ===
       const mainGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
       mainGradient.addColorStop(0, '#1a2332'); // Azul marino oscuro
@@ -256,18 +265,27 @@ export class TicketsService {
       // === ÁREA SUPERIOR CON INFO DEL EVENTO ===
       const headerHeight = 120;
       
-      // Título principal
+      // Título principal - usando fuente básica y tamaño grande
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 32px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 28px Arial, sans-serif';  
       ctx.fillText('ENTRADA GRATUITA', canvasWidth / 2, 40);
 
       // Nombre del evento
-      if (eventName) {
-        ctx.font = 'bold 24px Arial';
+      if (eventName?.trim()) {
+        ctx.font = 'bold 20px Arial, sans-serif';
         ctx.fillStyle = '#60a5fa'; // Azul claro
-        this.wrapAndFillText(ctx, eventName, canvasWidth / 2, 75, canvasWidth - 40, 26);
+        // Limitar el texto del evento a una línea
+        const maxEventWidth = canvasWidth - 60;
+        let eventText = eventName;
+        let textWidth = ctx.measureText(eventText).width;
+        
+        // Truncar si es muy largo
+        while (textWidth > maxEventWidth && eventText.length > 3) {
+          eventText = eventText.slice(0, -4) + '...';
+          textWidth = ctx.measureText(eventText).width;
+        }
+        
+        ctx.fillText(eventText, canvasWidth / 2, 75);
       }
 
       // Línea decorativa
@@ -282,8 +300,8 @@ export class TicketsService {
       const qrSectionY = headerHeight + 30;
       
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px Arial';
-      ctx.fillText('ESCANEA EL CÓDIGO QR', canvasWidth / 2, qrSectionY);
+      ctx.font = 'bold 18px Arial, sans-serif';  
+      ctx.fillText('ESCANEA EL CODIGO QR', canvasWidth / 2, qrSectionY);
 
       // === CONTENEDOR DEL QR ===
       const qrContainerSize = 440;
@@ -314,24 +332,24 @@ export class TicketsService {
         .slice(0, 8); // Limitar a 8 caracteres
 
       ctx.fillStyle = '#e5e7eb';
-      ctx.font = '16px Arial';
-      ctx.fillText('CÓDIGO DE ENTRADA', canvasWidth / 2, infoY);
+      ctx.font = '14px Arial, sans-serif';  
+      ctx.fillText('CODIGO DE ENTRADA', canvasWidth / 2, infoY);
       
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 28px "Courier New", Courier, monospace';
+      ctx.font = 'bold 24px Arial, monospace';  
       ctx.fillText(cleanTicketId, canvasWidth / 2, infoY + 35);
 
       // === INFORMACIÓN ADICIONAL ===
       const additionalInfoY = infoY + 80;
       
-      // Fecha y hora simulada (puedes obtenerla de la base de datos)
+      // Información del evento
       ctx.fillStyle = '#60a5fa';
-      ctx.font = 'bold 16px Arial';
-      ctx.fillText('VÁLIDO PARA EL EVENTO', canvasWidth / 2, additionalInfoY);
+      ctx.font = 'bold 14px Arial, sans-serif';
+      ctx.fillText('VALIDO PARA EL EVENTO', canvasWidth / 2, additionalInfoY);
       
       ctx.fillStyle = '#e5e7eb';
-      ctx.font = '14px Arial';
-      ctx.fillText('Presenta este código en la entrada', canvasWidth / 2, additionalInfoY + 25);
+      ctx.font = '12px Arial, sans-serif';
+      ctx.fillText('Presenta este codigo en la entrada', canvasWidth / 2, additionalInfoY + 25);
 
       // === FOOTER CON MARCA ===
       const footerY = canvasHeight - 60;
@@ -346,11 +364,11 @@ export class TicketsService {
 
       // Logo/Marca
       ctx.fillStyle = '#60a5fa';
-      ctx.font = 'bold 24px Arial';
+      ctx.font = 'bold 20px Arial, sans-serif';
       ctx.fillText('FEST-GO', canvasWidth / 2, footerY);
       
       ctx.fillStyle = '#9ca3af';
-      ctx.font = '12px Arial';
+      ctx.font = '10px Arial, sans-serif';
       ctx.fillText('Sistema de Tickets', canvasWidth / 2, footerY + 20);
 
       return canvas.toBuffer('image/png');
