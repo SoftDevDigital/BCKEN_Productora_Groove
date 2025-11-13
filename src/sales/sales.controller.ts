@@ -165,11 +165,12 @@ export class SalesController {
       
       try {
         this.ensureAdmin(claims);
-      } catch (authError: any) {
-        console.error('Error de autorización:', authError.message);
+      } catch (authError: unknown) {
+        const errorMessage = authError instanceof Error ? authError.message : 'Error desconocido';
+        console.error('Error de autorización:', errorMessage);
         return {
           statusCode: HttpStatus.FORBIDDEN,
-          message: authError.message || 'No autorizado: Requiere rol Admin',
+          message: errorMessage || 'No autorizado: Requiere rol Admin',
           error: 'FORBIDDEN',
         };
       }

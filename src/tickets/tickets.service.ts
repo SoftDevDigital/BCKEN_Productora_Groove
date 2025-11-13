@@ -56,21 +56,13 @@ export class TicketsService {
       
       if (sale.isVip) {
         // Generar QR VIP con diseño personalizado
-        qrImageBuffer = await this.generateVipQr(qrData);
+        qrImageBuffer = await this.generateVipQr(qrData, ticketId, sale.eventName);
       } else if (sale.isFree) {
         // Generar QR Free con diseño personalizado mejorado
         qrImageBuffer = await this.generateFreeQr(qrData, ticketId, sale.eventName);
       } else {
-        // QR normal
-        qrImageBuffer = await QRCode.toBuffer(qrData, { 
-          type: 'png',
-          width: 512,
-          margin: 2,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF',
-          },
-        });
+        // QR normal con diseño elegante
+        qrImageBuffer = await this.generateNormalQr(qrData, ticketId, sale.eventName);
       }
       
       const qrKey = sale.isVip 
@@ -108,113 +100,96 @@ export class TicketsService {
     return tickets;
   }
 
-  private async generateVipQr(qrData: string): Promise<Buffer> {
+  private async generateVipQr(
+    qrData: string,
+    ticketId?: string,
+    eventName?: string,
+  ): Promise<Buffer> {
     try {
-      // Generar QR base con colores dorado y negro
+      // Generar QR base con alta calidad
+      const qrSize = 300;
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
-        width: 600,
+        width: qrSize,
         margin: 2,
         color: {
-          dark: '#000000', // Negro para el QR
-          light: '#FFFFFF', // Blanco de fondo
+          dark: '#1a1a1a',
+          light: '#ffffff',
         },
-        errorCorrectionLevel: 'H', // Alto nivel de corrección
+        errorCorrectionLevel: 'H',
       });
 
-      // Crear canvas para agregar diseño VIP
-      const padding = 40;
-      const vipTextHeight = 50;
-      const borderWidth = 6;
-      const canvasWidth = 600 + (padding * 2);
-      const canvasHeight = 600 + (padding * 2) + vipTextHeight;
+      // Dimensiones del poster VIP
+      const canvasWidth = 600;
+      const canvasHeight = 800;
 
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
-      // Fondo degradado dorado
-      const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
-      gradient.addColorStop(0, '#FFD700'); // Dorado
-      gradient.addColorStop(0.5, '#FFA500'); // Naranja dorado
-      gradient.addColorStop(1, '#FFD700'); // Dorado
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // Borde decorativo externo
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = borderWidth;
-      ctx.strokeRect(
-        borderWidth / 2,
-        borderWidth / 2,
-        canvasWidth - borderWidth,
-        canvasHeight - borderWidth,
-      );
-
-      // Borde interno dorado
-      ctx.strokeStyle = '#FFD700';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(
-        borderWidth + 5,
-        borderWidth + 5,
-        canvasWidth - (borderWidth * 2) - 10,
-        canvasHeight - (borderWidth * 2) - 10,
-      );
-
-      // Cargar QR como imagen
-      const qrImage = await loadImage(qrBuffer);
-      
-      // Agregar QR en el centro
-      const qrX = padding;
-      const qrY = padding;
-      ctx.drawImage(qrImage, qrX, qrY, 600, 600);
-
-      // Agregar texto "VIP" arriba del QR
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 48px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Sombra del texto
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 3;
+      // === FONDO DORADO ELEGANTE ===
+      const gradient = ctx.createRadialGradient(
+        canvasWidth / 2, canvasHeight / 2, 0,
+        canvasWidth / 2, canvasHeight / 2, Math.max(canvasWidth, canvasHeight)
+      );
+      gradient.addColorStop(0, '#ffd700'); // Dorado brillante en el centro
+      gradient.addColorStop(0.3, '#ffb347'); // Dorado naranja
+      gradient.addColorStop(0.6, '#cd7f32'); // Bronce
+      gradient.addColorStop(1, '#8b4513'); // Marrón dorado oscuro
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // === PATRÓN DE TEXTURA DORADA ===
+      this.drawGoldTexture(ctx, canvasWidth, canvasHeight);
+
+      // === QR CENTRADO CON MARCO DORADO ===
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      // Marco dorado con múltiples bordes
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(qrX - 25, qrY - 25, qrSize + 50, qrSize + 50);
       
-      ctx.fillText('VIP', canvasWidth / 2, padding / 2);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(qrX - 20, qrY - 20, qrSize + 40, qrSize + 40);
       
+      ctx.fillStyle = '#ffb347';
+      ctx.fillRect(qrX - 15, qrY - 15, qrSize + 30, qrSize + 30);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
+
+      // Sombra del QR
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 10;
+
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
       // Resetear sombra
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
-      // Agregar texto "VIP" abajo del QR con diseño decorativo
-      const bottomTextY = padding + 600 + (vipTextHeight / 2);
-      
-      // Fondo para el texto inferior
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(
-        padding + 100,
-        bottomTextY - 25,
-        400,
-        50,
-      );
-      
-      // Texto VIP inferior
-      ctx.fillStyle = '#FFD700';
-      ctx.font = 'bold 36px Arial';
-      ctx.fillText('VIP TICKET', canvasWidth / 2, bottomTextY);
+      // === DISEÑO VIP EN LOS COSTADOS ===
+      this.drawVipElements(ctx, canvasWidth, canvasHeight);
 
-      // Convertir canvas a buffer
+      // === CORONA VIP EN LA PARTE SUPERIOR ===
+      this.drawVipCrown(ctx, canvasWidth / 2, 80);
+
+      // === ELEMENTOS DORADOS FLOTANTES ===
+      this.drawGoldParticles(ctx, canvasWidth, canvasHeight);
+
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR VIP, usando QR normal:', error);
-      // Fallback a QR normal si hay error
-      return await QRCode.toBuffer(qrData, {
-        type: 'png',
-        width: 512,
-        margin: 2,
-      });
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
   }
 
@@ -416,6 +391,270 @@ export class TicketsService {
     ctx.lineTo(x, y + radius);
     ctx.quadraticCurveTo(x, y, x + radius, y);
     ctx.closePath();
+  }
+
+  private async generateNormalQr(
+    qrData: string,
+    ticketId: string,
+    eventName?: string,
+  ): Promise<Buffer> {
+    try {
+      // Generar QR base con alta calidad
+      const qrSize = 300;
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: qrSize,
+        margin: 2,
+        color: {
+          dark: '#2563eb',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'H',
+      });
+
+      // Dimensiones del poster normal
+      const canvasWidth = 600;
+      const canvasHeight = 800;
+
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // === FONDO AZUL ELEGANTE ===
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      gradient.addColorStop(0, '#1e3a8a'); // Azul oscuro
+      gradient.addColorStop(0.5, '#3b82f6'); // Azul medio
+      gradient.addColorStop(1, '#1e40af'); // Azul profundo
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // === QR CENTRADO ===
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      // Fondo circular blanco para el QR
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sombra del QR
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // === DISEÑO CORPORATIVO EN LOS COSTADOS ===
+      this.drawCorporateElements(ctx, canvasWidth, canvasHeight);
+
+      // === ONDAS CORPORATIVAS ===
+      this.drawCorporateWaves(ctx, canvasWidth / 2, 100, '#60a5fa', 0.8);
+      this.drawCorporateWaves(ctx, canvasWidth / 2, canvasHeight - 100, '#3b82f6', 0.6);
+
+      // === ELEMENTOS FLOTANTES CORPORATIVOS ===
+      this.drawCorporateParticles(ctx, canvasWidth, canvasHeight);
+
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR Normal, usando QR básico:', error);
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
+    }
+  }
+
+  // === FUNCIONES AUXILIARES PARA DISEÑO VIP ===
+  
+  private drawGoldTexture(ctx: any, canvasWidth: number, canvasHeight: number) {
+    // Crear patrón de textura dorada
+    ctx.globalAlpha = 0.3;
+    
+    for (let i = 0; i < 50; i++) {
+      const x = Math.random() * canvasWidth;
+      const y = Math.random() * canvasHeight;
+      const size = Math.random() * 4 + 1;
+      
+      ctx.fillStyle = '#ffeb3b';
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    ctx.globalAlpha = 1;
+  }
+  
+  private drawVipElements(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const centerY = canvasHeight / 2;
+    
+    // Elementos VIP a los lados
+    const vipSymbols = ['👑', '💎', '⭐', '🏆', '💰'];
+    const goldColors = ['#ffd700', '#ffb347', '#daa520', '#b8860b'];
+    
+    for (let side of ['left', 'right']) {
+      const x = side === 'left' ? 60 : canvasWidth - 60;
+      
+      for (let i = 0; i < 6; i++) {
+        const y = centerY - 150 + (i * 50);
+        const symbol = vipSymbols[i % vipSymbols.length];
+        const color = goldColors[i % goldColors.length];
+        const size = 24 + Math.sin(i * 0.7) * 6;
+        
+        ctx.fillStyle = color;
+        ctx.font = `${size}px Arial, sans-serif`;
+        ctx.fillText(symbol, x, y);
+        
+        // Efecto dorado brillante
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12;
+        ctx.fillText(symbol, x, y);
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+  
+  private drawVipCrown(ctx: any, centerX: number, centerY: number) {
+    // Dibujar corona VIP
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 48px Arial, sans-serif';
+    
+    // Sombra de la corona
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    
+    ctx.fillText('👑', centerX, centerY);
+    
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  }
+  
+  private drawGoldParticles(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const particles = [
+      { x: 80, y: 120 }, { x: 520, y: 150 }, { x: 100, y: 680 },
+      { x: 500, y: 650 }, { x: 60, y: 400 }, { x: 540, y: 450 },
+      { x: 150, y: 200 }, { x: 450, y: 600 }, { x: 300, y: 120 }, { x: 300, y: 680 }
+    ];
+    
+    const goldSymbols = ['✨', '💫', '⭐', '🌟'];
+    const goldColors = ['#ffd700', '#ffb347', '#daa520'];
+    
+    for (const [index, pos] of particles.entries()) {
+      const symbol = goldSymbols[index % goldSymbols.length];
+      const color = goldColors[index % goldColors.length];
+      const size = 14 + Math.sin(index) * 4;
+      
+      ctx.fillStyle = color;
+      ctx.font = `${size}px Arial, sans-serif`;
+      ctx.globalAlpha = 0.8;
+      
+      // Efecto brillante
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(symbol, pos.x, pos.y);
+      
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+  }
+  
+  // === FUNCIONES AUXILIARES PARA DISEÑO NORMAL/CORPORATIVO ===
+  
+  private drawCorporateElements(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const centerY = canvasHeight / 2;
+    
+    // Elementos corporativos a los lados
+    const corporateSymbols = ['🎫', '🎪', '🎭', '🎨', '🎵', '🎤'];
+    const blueColors = ['#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8'];
+    
+    for (let side of ['left', 'right']) {
+      const x = side === 'left' ? 60 : canvasWidth - 60;
+      
+      for (let i = 0; i < 6; i++) {
+        const y = centerY - 150 + (i * 50);
+        const symbol = corporateSymbols[i % corporateSymbols.length];
+        const color = blueColors[i % blueColors.length];
+        const size = 20 + Math.sin(i * 0.5) * 4;
+        
+        ctx.fillStyle = color;
+        ctx.font = `${size}px Arial, sans-serif`;
+        ctx.fillText(symbol, x, y);
+        
+        // Efecto azul brillante
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8;
+        ctx.fillText(symbol, x, y);
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+  
+  private drawCorporateWaves(ctx: any, centerX: number, centerY: number, color: string, opacity: number) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = opacity;
+    ctx.lineWidth = 4;
+    
+    // Ondas corporativas más geométricas
+    for (let i = 0; i < 4; i++) {
+      const radius = 40 + (i * 25);
+      ctx.beginPath();
+      
+      // Forma hexagonal/corporativa
+      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 3) {
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius * 0.6;
+        
+        if (angle === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    
+    ctx.globalAlpha = 1;
+  }
+  
+  private drawCorporateParticles(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const particles = [
+      { x: 100, y: 160 }, { x: 500, y: 190 }, { x: 120, y: 640 },
+      { x: 480, y: 610 }, { x: 80, y: 380 }, { x: 520, y: 420 },
+      { x: 180, y: 120 }, { x: 420, y: 680 }
+    ];
+    
+    const corporateSymbols = ['▲', '●', '◆', '■'];
+    const blueColors = ['#60a5fa', '#3b82f6', '#2563eb'];
+    
+    for (const [index, pos] of particles.entries()) {
+      const symbol = corporateSymbols[index % corporateSymbols.length];
+      const color = blueColors[index % blueColors.length];
+      const size = 12 + Math.sin(index) * 3;
+      
+      ctx.fillStyle = color;
+      ctx.font = `${size}px Arial, sans-serif`;
+      ctx.globalAlpha = 0.7;
+      
+      // Efecto corporativo
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 6;
+      ctx.fillText(symbol, pos.x, pos.y);
+      
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
   }
 
   async validateTicket(ticketId: string) {
