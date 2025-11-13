@@ -225,7 +225,7 @@ export class TicketsService {
   ): Promise<Buffer> {
     try {
       // Generar QR base con alta calidad
-      const qrSize = 400;
+      const qrSize = 300;
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
         width: qrSize,
@@ -237,144 +237,169 @@ export class TicketsService {
         errorCorrectionLevel: 'H',
       });
 
-      // Dimensiones del poster estilo menú (vertical)
+      // Dimensiones del poster musical
       const canvasWidth = 600;
       const canvasHeight = 800;
 
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
-      // Configurar fuente por defecto del canvas para evitar problemas
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      // Título principal - usando fuente básica y tamaño grande
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 28px Arial, sans-serif';  
-      ctx.fillText('ENTRADA GRATUITA', canvasWidth / 2, 40);
 
-      // === FONDO PRINCIPAL CON GRADIENTE OSCURO ===
-      const mainGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-      mainGradient.addColorStop(0, '#1a2332'); // Azul marino oscuro
-      mainGradient.addColorStop(0.3, '#2d3748'); // Gris azulado
-      mainGradient.addColorStop(0.7, '#1a2332'); // Azul marino oscuro
-      mainGradient.addColorStop(1, '#0f1419'); // Negro azulado
-      ctx.fillStyle = mainGradient;
+      // === FONDO CON GRADIENTE OSCURO QUE TE GUSTÓ ===
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      gradient.addColorStop(0, '#1a2332'); // Azul oscuro en la parte superior
+      gradient.addColorStop(0.5, '#2d3748'); // Gris azulado en el medio
+      gradient.addColorStop(1, '#0f1419'); // Negro en la parte inferior
+
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-      // === ÁREA SUPERIOR CON INFO DEL EVENTO ===
-      const headerHeight = 120;
-      
-      // Título principal - usando fuente básica y tamaño grande
+      // === QR CENTRADO ===
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      // Fondo circular blanco para el QR
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 28px Arial, sans-serif';  
-      ctx.fillText('ENTRADA GRATUITA', canvasWidth / 2, 40);
-
-      // Nombre del evento
-      if (eventName?.trim()) {
-        ctx.font = 'bold 20px Arial, sans-serif';
-        ctx.fillStyle = '#60a5fa'; // Azul claro
-        // Limitar el texto del evento a una línea
-        const maxEventWidth = canvasWidth - 60;
-        let eventText = eventName;
-        let textWidth = ctx.measureText(eventText).width;
-        
-        // Truncar si es muy largo
-        while (textWidth > maxEventWidth && eventText.length > 3) {
-          eventText = eventText.slice(0, -4) + '...';
-          textWidth = ctx.measureText(eventText).width;
-        }
-        
-        ctx.fillText(eventText, canvasWidth / 2, 75);
-      }
-
-      // Línea decorativa
-      ctx.strokeStyle = '#60a5fa';
-      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(50, headerHeight - 10);
-      ctx.lineTo(canvasWidth - 50, headerHeight - 10);
-      ctx.stroke();
-
-      // === SECCIÓN "ESCANEA EL CÓDIGO QR" ===
-      const qrSectionY = headerHeight + 30;
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px Arial, sans-serif';  
-      ctx.fillText('ESCANEA EL CODIGO QR', canvasWidth / 2, qrSectionY);
-
-      // === CONTENEDOR DEL QR ===
-      const qrContainerSize = 440;
-      const qrX = (canvasWidth - qrContainerSize) / 2;
-      const qrY = qrSectionY + 40;
-
-      // Fondo blanco redondeado para el QR
-      ctx.fillStyle = '#ffffff';
-      this.roundRect(ctx, qrX, qrY, qrContainerSize, qrContainerSize, 20);
+      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Dibujar el QR centrado en el contenedor
-      const qrImageX = qrX + (qrContainerSize - qrSize) / 2;
-      const qrImageY = qrY + (qrContainerSize - qrSize) / 2;
-      
+      // Sombra del QR
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+
       const qrImage = await loadImage(qrBuffer);
-      ctx.drawImage(qrImage, qrImageX, qrImageY, qrSize, qrSize);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // === INFORMACIÓN INFERIOR ===
-      const infoY = qrY + qrContainerSize + 40;
-      
-      // Código del ticket
-      const cleanTicketId = ticketId
-        .toUpperCase()
-        .split('')
-        .filter((c) => /[A-Z0-9]/.test(c))
-        .join('')
-        .slice(0, 8); // Limitar a 8 caracteres
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
 
-      ctx.fillStyle = '#e5e7eb';
-      ctx.font = '14px Arial, sans-serif';  
-      ctx.fillText('CODIGO DE ENTRADA', canvasWidth / 2, infoY);
+      // === DISEÑO MUSICAL EN LOS COSTADOS ===
       
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 24px Arial, monospace';  
-      ctx.fillText(cleanTicketId, canvasWidth / 2, infoY + 35);
+      // LADO IZQUIERDO - Notas musicales y ondas de sonido
+      this.drawMusicalElements(ctx, 'left', canvasWidth, canvasHeight);
+      
+      // LADO DERECHO - Elementos musicales decorativos
+      this.drawMusicalElements(ctx, 'right', canvasWidth, canvasHeight);
 
-      // === INFORMACIÓN ADICIONAL ===
-      const additionalInfoY = infoY + 80;
+      // === ELEMENTOS DECORATIVOS SUPERIORES E INFERIORES ===
       
-      // Información del evento
-      ctx.fillStyle = '#60a5fa';
-      ctx.font = 'bold 14px Arial, sans-serif';
-      ctx.fillText('VALIDO PARA EL EVENTO', canvasWidth / 2, additionalInfoY);
+      // Ondas de sonido en la parte superior
+      this.drawSoundWaves(ctx, canvasWidth / 2, 100, 180, '#60a5fa', 0.6);
       
-      ctx.fillStyle = '#e5e7eb';
-      ctx.font = '12px Arial, sans-serif';
-      ctx.fillText('Presenta este codigo en la entrada', canvasWidth / 2, additionalInfoY + 25);
+      // Ondas de sonido en la parte inferior
+      this.drawSoundWaves(ctx, canvasWidth / 2, canvasHeight - 100, 180, '#10b981', 0.6);
 
-      // === FOOTER CON MARCA ===
-      const footerY = canvasHeight - 60;
-      
-      // Línea decorativa superior
-      ctx.strokeStyle = '#374151';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(50, footerY - 20);
-      ctx.lineTo(canvasWidth - 50, footerY - 20);
-      ctx.stroke();
-
-      // Logo/Marca
-      ctx.fillStyle = '#60a5fa';
-      ctx.font = 'bold 20px Arial, sans-serif';
-      ctx.fillText('FEST-GO', canvasWidth / 2, footerY);
-      
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '10px Arial, sans-serif';
-      ctx.fillText('Sistema de Tickets', canvasWidth / 2, footerY + 20);
+      // === PARTÍCULAS DE MÚSICA FLOTANTES ===
+      this.drawFloatingNotes(ctx, canvasWidth, canvasHeight);
 
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR Free, usando QR normal:', error);
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
+    }
+  }
+
+  // === FUNCIONES AUXILIARES PARA DISEÑO MUSICAL ===
+  
+  private drawMusicalElements(ctx: any, side: 'left' | 'right', canvasWidth: number, canvasHeight: number) {
+    const x = side === 'left' ? 60 : canvasWidth - 60;
+    const centerY = canvasHeight / 2;
+    
+    // Notas musicales en vertical
+    const noteColors = ['#60a5fa', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const noteSymbols = ['♪', '♫', '♬', '♩', '♭', '♯'];
+    
+    for (let i = 0; i < 8; i++) {
+      const y = centerY - 200 + (i * 50);
+      const color = noteColors[i % noteColors.length];
+      const symbol = noteSymbols[i % noteSymbols.length];
+      const size = 20 + Math.sin(i * 0.5) * 8;
+      
+      ctx.fillStyle = color;
+      ctx.font = `${size}px Arial, sans-serif`;
+      ctx.fillText(symbol, x, y);
+      
+      // Efecto de brillo
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(symbol, x, y);
+      ctx.shadowBlur = 0;
+    }
+    
+    // Líneas de pentagrama estilizadas
+    ctx.strokeStyle = 'rgba(96, 165, 250, 0.3)';
+    ctx.lineWidth = 2;
+    const lineStart = side === 'left' ? 20 : canvasWidth - 120;
+    const lineEnd = side === 'left' ? 100 : canvasWidth - 20;
+    
+    for (let i = 0; i < 5; i++) {
+      const y = centerY - 60 + (i * 15);
+      ctx.beginPath();
+      ctx.moveTo(lineStart, y);
+      ctx.lineTo(lineEnd, y);
+      ctx.stroke();
+    }
+  }
+  
+  private drawSoundWaves(ctx: any, centerX: number, centerY: number, width: number, color: string, opacity: number) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = opacity;
+    ctx.lineWidth = 3;
+    
+    // Ondas de sonido concéntricas
+    for (let i = 0; i < 5; i++) {
+      const radius = 30 + (i * 20);
+      ctx.beginPath();
+      
+      // Onda superior
+      ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
+      ctx.stroke();
+      
+      // Onda inferior (si hay espacio)
+      if (centerY > 200) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI);
+        ctx.stroke();
+      }
+    }
+    
+    ctx.globalAlpha = 1;
+  }
+  
+  private drawFloatingNotes(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const notePositions = [
+      { x: 100, y: 150 }, { x: 500, y: 180 }, { x: 150, y: 650 },
+      { x: 450, y: 620 }, { x: 80, y: 400 }, { x: 520, y: 450 },
+      { x: 200, y: 100 }, { x: 400, y: 700 }
+    ];
+    
+    const noteSymbols = ['♪', '♫', '♬', '♩'];
+    const noteColors = ['#60a5fa', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    
+    for (const [index, pos] of notePositions.entries()) {
+      const symbol = noteSymbols[index % noteSymbols.length];
+      const color = noteColors[index % noteColors.length];
+      const size = 16 + Math.sin(index) * 6;
+      
+      ctx.fillStyle = color;
+      ctx.font = `${size}px Arial, sans-serif`;
+      ctx.globalAlpha = 0.7;
+      
+      // Efecto de resplandor
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.fillText(symbol, pos.x, pos.y);
+      
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
     }
   }
 
