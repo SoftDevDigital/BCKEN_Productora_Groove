@@ -555,7 +555,7 @@ Equipo FEST-GO
     resellerEmail: string,
   ) {
     const saleId = uuidv4();
-    const { eventId, batchId, quantity, buyerEmailOrAlias } = createFreeSaleDto;
+    const { eventId, batchId, quantity, buyerEmailOrAlias, isBirthday, birthdayPersonName } = createFreeSaleDto;
 
     try {
       // 1. Validar que el usuario comprador existe
@@ -658,6 +658,10 @@ Equipo FEST-GO
           total: 0, // Total es 0 porque es gratis
           status: 'approved', // Aprobado inmediatamente (sin pago)
           isFree: true, // Marcar como gratis
+          isBirthday: isBirthday || false, // Indica si es cumpleañero
+          birthdayPersonName: birthdayPersonName || null, // Nombre del cumpleañero
+          createdBy: resellerId, // Quién generó este ticket gratis
+          createdByEmail: resellerEmail, // Email de quien generó
           createdAt: new Date().toISOString(),
         },
       };

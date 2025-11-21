@@ -230,4 +230,48 @@ export class ReportsController {
       };
     }
   }
+
+  @Get('free-qr')
+  async getFreeQRReport(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const report = await this.reportsService.getFreeQRReport();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Reporte de QR Free obtenido exitosamente',
+        data: report,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al generar reporte de QR Free',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('birthdays')
+  async getBirthdayReport(@Req() req: Request) {
+    try {
+      const claims = this.getClaims(req);
+      this.ensureAdmin(claims);
+      const report = await this.reportsService.getBirthdayReport();
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Reporte de cumpleañeros obtenido exitosamente',
+        data: report,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error al generar reporte de cumpleañeros',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
