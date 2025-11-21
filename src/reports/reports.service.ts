@@ -235,6 +235,30 @@ export class ReportsService {
           // Calculate average ticket price
           const averageTicketPrice = totalTicketsSold > 0 ? totalRevenue / totalTicketsSold : 0;
           
+          // Get detailed sales table for this reseller
+          const salesTable = await Promise.all(
+            resellerSales.map(async (sale) => {
+              const event = await this.eventsService.findOne(sale.eventId);
+              const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
+              const buyer = await this.usersService.getUserProfile(sale.userId);
+              
+              return {
+                saleId: sale.id,
+                date: sale.createdAt,
+                eventName: event?.name || 'Unknown',
+                batchName: batch?.name || 'Unknown',
+                buyerEmail: buyer?.email || 'Unknown',
+                quantity: sale.quantity,
+                unitPrice: sale.basePrice || 0,
+                total: sale.total || 0,
+                isFree: sale.isFree || false,
+                isBirthday: sale.isBirthday || false,
+                birthdayPersonName: sale.birthdayPersonName || null,
+                status: sale.status,
+              };
+            })
+          );
+          
           // Get sales by event for this reseller
           const salesByEvent = {};
           for (const sale of resellerSales) {
@@ -262,7 +286,7 @@ export class ReportsService {
 
           return {
             resellerId: reseller.id,
-            name: `${reseller.given_name} ${reseller.family_name}`,
+            name: `${reseller.given_name || ''} ${reseller.family_name || ''}`.trim() || reseller.email,
             email: reseller.email,
             totalSales,
             paidSalesCount,
@@ -272,6 +296,7 @@ export class ReportsService {
             freeTicketsSold,
             totalRevenue,
             averageTicketPrice: Math.round(averageTicketPrice * 100) / 100,
+            salesTable, // Tabla detallada de ventas
             salesByEvent,
             createdAt: reseller.createdAt,
           };
@@ -343,6 +368,193 @@ export class ReportsService {
       return {
         totalScans: 0,
       };
+    }
+  }
+
+  /**
+   * Obtiene reporte detallado de QR Free generados
+   * Incluye quién los generó y cuántos
+   */
+  async getFreeQRReport() {
+    try {
+      // Get all approved free sales
+      const salesResult = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.salesTable,
+          FilterExpression: '#status = :status AND #isFree = :isFree',
+          ExpressionAttributeNames: { 
+            '#status': 'status',
+            '#isFree': 'isFree'
+          },
+          ExpressionAttributeValues: { 
+            ':status': 'approved',
+            ':isFree': true
+          },
+        }),
+      );
+      const freeSales = salesResult.Items || [];
+
+      // Count by creator
+      const creatorStats: Record<string, any> = {};
+      let totalFreeTickets = 0;
+      let totalFreeSales = 0;
+
+      for (const sale of freeSales) {
+        const creatorId = sale.createdBy || sale.resellerId || 'unknown';
+        const creatorEmail = sale.createdByEmail || 'unknown';
+        
+        if (!creatorStats[creatorId]) {
+          // Get creator info
+          let creatorInfo;
+          try {
+            creatorInfo = await this.usersService.getUserProfile(creatorId);
+          } catch (error) {
+            creatorInfo = { email: creatorEmail, role: 'Unknown' };
+          }
+
+          creatorStats[creatorId] = {
+            creatorId,
+            creatorName: creatorInfo?.given_name && creatorInfo?.family_name 
+              ? `${creatorInfo.given_name} ${creatorInfo.family_name}` 
+              : creatorEmail,
+            creatorEmail: creatorInfo?.email || creatorEmail,
+            creatorRole: creatorInfo?.role || 'Unknown',
+            totalFreeTickets: 0,
+            totalFreeSales: 0,
+            sales: [],
+          };
+        }
+
+        // Add sale to creator
+        const event = await this.eventsService.findOne(sale.eventId);
+        const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
+        
+        creatorStats[creatorId].totalFreeTickets += sale.quantity || 0;
+        creatorStats[creatorId].totalFreeSales += 1;
+        creatorStats[creatorId].sales.push({
+          saleId: sale.id,
+          date: sale.createdAt,
+          eventName: event?.name || 'Unknown',
+          batchName: batch?.name || 'Unknown',
+          quantity: sale.quantity,
+          isBirthday: sale.isBirthday || false,
+          birthdayPersonName: sale.birthdayPersonName || null,
+        });
+
+        totalFreeTickets += sale.quantity || 0;
+        totalFreeSales += 1;
+      }
+
+      // Convert to array and sort by total tickets descending
+      const creatorStatsArray = Object.values(creatorStats).sort(
+        (a: any, b: any) => b.totalFreeTickets - a.totalFreeTickets
+      );
+
+      return {
+        summary: {
+          totalFreeTickets,
+          totalFreeSales,
+          totalCreators: creatorStatsArray.length,
+        },
+        creators: creatorStatsArray,
+      };
+    } catch (error) {
+      console.error('Error al generar reporte de QR Free:', error);
+      throw new HttpException(
+        'Error al generar reporte de QR Free',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Obtiene reporte de cumpleañeros con sus invitados
+   */
+  async getBirthdayReport() {
+    try {
+      // Get all approved free sales that are birthday sales
+      const salesResult = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.salesTable,
+          FilterExpression: '#status = :status AND #isFree = :isFree AND #isBirthday = :isBirthday',
+          ExpressionAttributeNames: { 
+            '#status': 'status',
+            '#isFree': 'isFree',
+            '#isBirthday': 'isBirthday'
+          },
+          ExpressionAttributeValues: { 
+            ':status': 'approved',
+            ':isFree': true,
+            ':isBirthday': true
+          },
+        }),
+      );
+      const birthdaySales = salesResult.Items || [];
+
+      // Group by birthday person
+      const birthdayStats: Record<string, any> = {};
+      let totalBirthdayTickets = 0;
+      let totalBirthdayPersons = 0;
+
+      for (const sale of birthdaySales) {
+        const birthdayName = sale.birthdayPersonName || 'Sin nombre';
+        const key = `${birthdayName}_${sale.eventId}`;
+
+        if (!birthdayStats[key]) {
+          const event = await this.eventsService.findOne(sale.eventId);
+          const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
+          
+          birthdayStats[key] = {
+            birthdayPersonName: birthdayName,
+            eventName: event?.name || 'Unknown',
+            eventDate: event?.from || 'Unknown',
+            batchName: batch?.name || 'Unknown',
+            totalGuests: 0,
+            guests: [],
+          };
+          totalBirthdayPersons += 1;
+        }
+
+        // Get guest info
+        let guestInfo;
+        try {
+          guestInfo = await this.usersService.getUserProfile(sale.userId);
+        } catch (error) {
+          guestInfo = { email: 'Unknown' };
+        }
+
+        birthdayStats[key].totalGuests += sale.quantity;
+        birthdayStats[key].guests.push({
+          guestEmail: guestInfo?.email || 'Unknown',
+          guestName: guestInfo?.given_name && guestInfo?.family_name
+            ? `${guestInfo.given_name} ${guestInfo.family_name}`
+            : guestInfo?.email || 'Unknown',
+          ticketsReceived: sale.quantity,
+          date: sale.createdAt,
+        });
+
+        totalBirthdayTickets += sale.quantity || 0;
+      }
+
+      // Convert to array and sort by total guests descending
+      const birthdayStatsArray = Object.values(birthdayStats).sort(
+        (a: any, b: any) => b.totalGuests - a.totalGuests
+      );
+
+      return {
+        summary: {
+          totalBirthdayPersons,
+          totalBirthdayTickets,
+          totalBirthdaySales: birthdaySales.length,
+        },
+        birthdays: birthdayStatsArray,
+      };
+    } catch (error) {
+      console.error('Error al generar reporte de cumpleañeros:', error);
+      throw new HttpException(
+        'Error al generar reporte de cumpleañeros',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }
