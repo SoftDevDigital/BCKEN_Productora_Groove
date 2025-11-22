@@ -238,16 +238,37 @@ export class ReportsService {
           // Get detailed sales table for this reseller
           const salesTable = await Promise.all(
             resellerSales.map(async (sale) => {
-              const event = await this.eventsService.findOne(sale.eventId);
-              const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
-              const buyer = await this.usersService.getUserProfile(sale.userId);
+              let event = null;
+              let batch = null;
+              let buyer = null;
+              
+              try {
+                event = await this.eventsService.findOne(sale.eventId) as any;
+              } catch (e) {
+                console.error(`Error obteniendo evento ${sale.eventId}:`, e);
+                event = null;
+              }
+              
+              try {
+                batch = await this.batchesService.findOne(sale.eventId, sale.batchId) as any;
+              } catch (e) {
+                console.error(`Error obteniendo tanda ${sale.batchId}:`, e);
+                batch = null;
+              }
+              
+              try {
+                buyer = await this.usersService.getUserProfile(sale.userId) as any;
+              } catch (e) {
+                console.error(`Error obteniendo comprador ${sale.userId}:`, e);
+                buyer = null;
+              }
               
               return {
                 saleId: sale.id,
                 date: sale.createdAt,
-                eventName: event?.name || 'Unknown',
-                batchName: batch?.name || 'Unknown',
-                buyerEmail: buyer?.email || 'Unknown',
+                eventName: event && typeof (event as any).name === 'string' ? (event as any).name : 'Unknown',
+                batchName: batch && typeof (batch as any).name === 'string' ? (batch as any).name : 'Unknown',
+                buyerEmail: buyer && typeof (buyer as any).email === 'string' ? (buyer as any).email : 'Unknown',
                 quantity: sale.quantity,
                 unitPrice: sale.basePrice || 0,
                 total: sale.total || 0,
@@ -264,9 +285,15 @@ export class ReportsService {
           for (const sale of resellerSales) {
             const eventId = sale.eventId;
             if (!salesByEvent[eventId]) {
-              const event = await this.eventsService.findOne(eventId);
+              let event = null;
+              try {
+                event = await this.eventsService.findOne(eventId) as any;
+              } catch (e) {
+                console.error(`Error obteniendo evento en salesByEvent ${eventId}:`, e);
+                event = null;
+              }
               salesByEvent[eventId] = {
-                eventName: event?.name || 'Unknown',
+                eventName: event && typeof (event as any).name === 'string' ? (event as any).name : 'Unknown',
                 ticketsSold: 0,
                 revenue: 0,
                 sales: 0,
