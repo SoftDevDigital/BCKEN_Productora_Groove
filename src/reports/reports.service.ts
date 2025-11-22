@@ -296,8 +296,8 @@ export class ReportsService {
             freeTicketsSold,
             totalRevenue,
             averageTicketPrice: Math.round(averageTicketPrice * 100) / 100,
-             subtotal: totalRevenue,
-             commission: Math.round(totalRevenue * 0.10),
+              subtotal: Number.isFinite(totalRevenue) ? totalRevenue : 0,
+              commission: Number.isFinite(totalRevenue) ? Math.round(totalRevenue * 0.10) : 0,
             salesTable, // Tabla detallada de ventas
             salesByEvent,
             createdAt: reseller.createdAt,
