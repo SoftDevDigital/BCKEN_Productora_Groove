@@ -22,6 +22,9 @@ export class CreateBatchDto {
   @IsBoolean()
   isVip: boolean; // Indica si la tanda es VIP
 
+  @IsBoolean()
+  isAfter: boolean; // Indica si la tanda es After
+
   @IsDateString()
   startTime: string; // Horario de inicio de la tanda (formato ISO)
 

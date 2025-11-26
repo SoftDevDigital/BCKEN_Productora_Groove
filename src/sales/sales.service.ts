@@ -225,8 +225,17 @@ export class SalesService {
           sale.Item.batchId,
         );
         const isVip = batch?.isVip || false;
+        const isAfter = batch?.isAfter || false;
         
-        console.log('Creando tickets para venta:', { saleId, isVip });
+        // Determinar tipo de entrada para mostrar en el email
+        let ticketType = 'General';
+        if (isVip) {
+          ticketType = 'VIP';
+        } else if (isAfter) {
+          ticketType = 'After';
+        }
+        
+        console.log('Creando tickets para venta:', { saleId, isVip, isAfter });
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -234,6 +243,7 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
+          isAfter,
         });
         const ticketIds = tickets.map((ticket) => ticket.ticketId);
         console.log('Actualizando tickets de usuario:', {
@@ -295,6 +305,7 @@ Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.
 **Comprobante de Pago**
 - Venta ID: ${saleId}
+- Tipo de entrada: ${ticketType}
 - Evento: ${event?.name || 'Desconocido'}
 - Tanda: ${batch?.name || 'Desconocida'}
 - Cantidad de tickets: ${sale.Item.quantity}
@@ -383,6 +394,9 @@ Equipo FEST-GO
                     </tr>
                     <tr>
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td>
+                    </tr>
+                    <tr>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}</span></td>
                     </tr>
                     <tr>
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td>
@@ -766,11 +780,12 @@ Equipo FEST-GO
         );
       }
 
-      // 2. Obtener batch para verificar si es VIP (también se usa para el email)
+      // 2. Obtener batch para verificar si es VIP o After (también se usa para el email)
       let isVip = false;
+      let isAfter = false;
       let batch;
       try {
-        console.log('Obteniendo tanda para verificar VIP (venta gratis):', {
+        console.log('Obteniendo tanda para verificar VIP/After (venta gratis):', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
@@ -779,9 +794,11 @@ Equipo FEST-GO
           sale.Item.batchId,
         );
         isVip = batch?.isVip || false;
+        isAfter = batch?.isAfter || false;
       } catch (batchError: any) {
-        console.error('Error al obtener batch, asumiendo no VIP:', batchError.message);
+        console.error('Error al obtener batch, asumiendo no VIP/After:', batchError.message);
         batch = { name: 'Tanda' }; // Valor por defecto para el email
+        isAfter = false;
       }
 
       // 3. Obtener datos del evento antes de crear tickets (para el nombre en el QR)
@@ -802,7 +819,7 @@ Equipo FEST-GO
       let tickets;
       let ticketIds: string[] = [];
       try {
-        console.log('Creando tickets para venta gratis:', { saleId, isVip, eventName: event?.name });
+        console.log('Creando tickets para venta gratis:', { saleId, isVip, isAfter, eventName: event?.name });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -810,6 +827,7 @@ Equipo FEST-GO
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
+          isAfter,
           isFree: true, // Marcar como ticket gratis para usar diseño especial
           eventName: event?.name, // Pasar nombre del evento para el QR
         });
@@ -911,6 +929,14 @@ Equipo FEST-GO
         // No lanzar error, solo loguear - los tickets ya están creados
       } else {
         try {
+          // Determinar tipo de entrada para mostrar en el email
+          let ticketType = 'General';
+          if (isVip) {
+            ticketType = 'VIP';
+          } else if (isAfter) {
+            ticketType = 'After';
+          }
+          
           const emailBody = `
 Hola ${userName},
 
@@ -924,6 +950,7 @@ Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es compl
 📋 DETALLES DEL TICKET GRATUITO
 ═══════════════════════════════════════
 • Venta ID: ${saleId}
+• Tipo de entrada: ${ticketType}
 • Evento: ${event?.name || 'Desconocido'}
 • Tanda: ${batch?.name || 'Desconocida'}
 • Cantidad de tickets: ${sale.Item.quantity}
@@ -1010,6 +1037,7 @@ Equipo FEST-GO
                 <td style="padding:20px 24px;">
                   <table role="presentation" width="100%" style="font-family:Arial,Helvetica,sans-serif; font-size:14px;">
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
