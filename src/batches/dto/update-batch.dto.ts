@@ -28,6 +28,10 @@ export class UpdateBatchDto {
   isVip?: boolean; // Indica si la tanda es VIP
 
   @IsOptional()
+  @IsBoolean()
+  isAfter?: boolean; // Indica si la tanda es After
+
+  @IsOptional()
   @IsDateString()
   startTime?: string; // Horario de inicio de la tanda (formato ISO)
 

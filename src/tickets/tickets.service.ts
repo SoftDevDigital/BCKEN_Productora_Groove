@@ -38,6 +38,7 @@ export class TicketsService {
     batchId: string;
     quantity: number;
     isVip?: boolean;
+    isAfter?: boolean;
     isFree?: boolean;
     eventName?: string;
   }) {
@@ -57,16 +58,21 @@ export class TicketsService {
       if (sale.isVip) {
         // Generar QR VIP con diseño personalizado
         qrImageBuffer = await this.generateVipQr(qrData, ticketId, sale.eventName);
+      } else if (sale.isAfter) {
+        // Generar QR After con diseño personalizado
+        qrImageBuffer = await this.generateAfterQr(qrData, ticketId, sale.eventName);
       } else if (sale.isFree) {
         // Generar QR Free con diseño personalizado mejorado
         qrImageBuffer = await this.generateFreeQr(qrData, ticketId, sale.eventName);
       } else {
-        // QR normal con diseño elegante
+        // QR normal (General) con diseño elegante
         qrImageBuffer = await this.generateNormalQr(qrData, ticketId, sale.eventName);
       }
       
       const qrKey = sale.isVip 
         ? `qrs/vip/ticket-${ticketId}-${uuidv4()}.png`
+        : sale.isAfter
+        ? `qrs/after/ticket-${ticketId}-${uuidv4()}.png`
         : sale.isFree
         ? `qrs/free/ticket-${ticketId}-${uuidv4()}.png`
         : `qrs/ticket-${ticketId}-${uuidv4()}.png`;
@@ -90,6 +96,7 @@ export class TicketsService {
           batchId: sale.batchId,
           status: 'active',
           isVip: sale.isVip || false,
+          isAfter: sale.isAfter || false,
           qrS3Url,
           createdAt: new Date().toISOString(),
         },
@@ -280,6 +287,189 @@ export class TicketsService {
       console.error('Error generando QR Free, usando QR normal:', error);
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
+  }
+
+  private async generateAfterQr(
+    qrData: string,
+    ticketId: string,
+    eventName?: string,
+  ): Promise<Buffer> {
+    try {
+      // Generar QR base con alta calidad
+      const qrSize = 300;
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: qrSize,
+        margin: 2,
+        color: {
+          dark: '#1a0d2e',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'H',
+      });
+
+      // Dimensiones del poster After
+      const canvasWidth = 600;
+      const canvasHeight = 800;
+
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // === FONDO CON GRADIENTE MORADO/VIOLETA NOCTURNO ===
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      gradient.addColorStop(0, '#2d1b4e'); // Morado oscuro en la parte superior
+      gradient.addColorStop(0.5, '#4a2c6b'); // Morado medio
+      gradient.addColorStop(1, '#1a0d2e'); // Morado muy oscuro en la parte inferior
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // === QR CENTRADO ===
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      // Fondo circular blanco para el QR
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sombra del QR
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.4)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // === TEXTO "AFTER" EN LA PARTE SUPERIOR ===
+      ctx.fillStyle = '#a78bfa';
+      ctx.font = 'bold 48px monospace';
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.6)';
+      ctx.shadowBlur = 15;
+      try {
+        ctx.fillText('AFTER', canvasWidth / 2, 80);
+      } catch (textError) {
+        console.warn('Error renderizando texto AFTER, usando fallback:', textError);
+        ctx.font = 'bold 36px Arial, sans-serif';
+        ctx.fillText('AFTER', canvasWidth / 2, 80);
+      }
+      ctx.shadowBlur = 0;
+
+      // === TEXTO "FEST-GO" EN LA PARTE INFERIOR ===
+      ctx.fillStyle = '#c4b5fd';
+      ctx.font = 'bold 24px monospace';
+      try {
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 60);
+      } catch (textError) {
+        console.warn('Error renderizando texto FEST-GO, usando fallback:', textError);
+        ctx.font = 'bold 20px Arial, sans-serif';
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 60);
+      }
+
+      // === ELEMENTOS DECORATIVOS NOCTURNOS ===
+      this.drawAfterElements(ctx, canvasWidth, canvasHeight);
+
+      // === ESTRELLAS FLOTANTES ===
+      this.drawStars(ctx, canvasWidth, canvasHeight);
+
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR After, usando QR normal:', error);
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
+    }
+  }
+
+  // === FUNCIONES AUXILIARES PARA DISEÑO AFTER ===
+  
+  private drawAfterElements(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const centerY = canvasHeight / 2;
+    
+    // Líneas decorativas en los costados con efecto neón morado
+    const neonColors = ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe'];
+    
+    // Lado izquierdo
+    for (let i = 0; i < 6; i++) {
+      const y = centerY - 150 + (i * 50);
+      const color = neonColors[i % neonColors.length];
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      
+      ctx.beginPath();
+      ctx.moveTo(30, y);
+      ctx.lineTo(80, y);
+      ctx.stroke();
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    // Lado derecho
+    for (let i = 0; i < 6; i++) {
+      const y = centerY - 150 + (i * 50);
+      const color = neonColors[i % neonColors.length];
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      
+      ctx.beginPath();
+      ctx.moveTo(canvasWidth - 80, y);
+      ctx.lineTo(canvasWidth - 30, y);
+      ctx.stroke();
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    ctx.globalAlpha = 1;
+  }
+  
+  private drawStars(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const starPositions = [
+      { x: 100, y: 120 }, { x: 500, y: 140 }, { x: 120, y: 680 },
+      { x: 480, y: 660 }, { x: 70, y: 350 }, { x: 530, y: 380 },
+      { x: 180, y: 90 }, { x: 420, y: 710 }
+    ];
+    
+    ctx.fillStyle = '#c4b5fd';
+    ctx.globalAlpha = 0.8;
+    
+    for (const pos of starPositions) {
+      ctx.shadowColor = '#8b5cf6';
+      ctx.shadowBlur = 10;
+      
+      // Dibujar estrella simple (cruz con punto)
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y - 5);
+      ctx.lineTo(pos.x, pos.y + 5);
+      ctx.moveTo(pos.x - 5, pos.y);
+      ctx.lineTo(pos.x + 5, pos.y);
+      ctx.strokeStyle = '#c4b5fd';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // Punto central
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    ctx.globalAlpha = 1;
   }
 
   // === FUNCIONES AUXILIARES PARA DISEÑO MUSICAL ===

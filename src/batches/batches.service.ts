@@ -36,6 +36,7 @@ export class BatchesService {
         availableTickets: createBatchDto.totalTickets,
         price: createBatchDto.price,
         isVip: createBatchDto.isVip,
+        isAfter: createBatchDto.isAfter,
         startTime: createBatchDto.startTime,
         endTime: createBatchDto.endTime,
         createdAt: new Date().toISOString(),
@@ -135,6 +136,11 @@ export class BatchesService {
       updateExpressionParts.push('#isVip = :isVip');
       expressionAttributeNames['#isVip'] = 'isVip';
       expressionAttributeValues[':isVip'] = updateBatchDto.isVip;
+    }
+    if (updateBatchDto.isAfter !== undefined) {
+      updateExpressionParts.push('#isAfter = :isAfter');
+      expressionAttributeNames['#isAfter'] = 'isAfter';
+      expressionAttributeValues[':isAfter'] = updateBatchDto.isAfter;
     }
     if (updateBatchDto.startTime !== undefined) {
       updateExpressionParts.push('#startTime = :startTime');
