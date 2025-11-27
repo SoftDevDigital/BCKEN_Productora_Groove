@@ -193,6 +193,83 @@ export class TicketsService {
       // === ELEMENTOS DORADOS FLOTANTES ===
       this.drawGoldParticles(ctx, canvasWidth, canvasHeight);
 
+      // === TEXTO PROFESIONAL (después de los decorativos) ===
+      
+      // Fondo semi-transparente para el nombre del evento
+      if (eventName) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(20, 130, canvasWidth - 40, 50);
+      }
+
+      // Nombre del evento en la parte superior - MUY VISIBLE
+      if (eventName) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px monospace';
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
+        ctx.shadowBlur = 15;
+        try {
+          const displayName = eventName.length > 28 ? eventName.substring(0, 25) + '...' : eventName;
+          ctx.fillText(displayName.toUpperCase(), canvasWidth / 2, 160);
+        } catch (textError) {
+          console.warn('Error renderizando nombre del evento VIP, usando fallback:', textError);
+          ctx.font = 'bold 26px Arial, sans-serif';
+          ctx.fillText(eventName.substring(0, 25), canvasWidth / 2, 160);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // Fondo semi-transparente para "VIP"
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+      ctx.fillRect(canvasWidth / 2 - 80, 185, 160, 50);
+
+      // Tipo de entrada VIP - MUY GRANDE Y VISIBLE
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 60px monospace';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 20;
+      try {
+        ctx.fillText('VIP', canvasWidth / 2, 220);
+      } catch (textError) {
+        console.warn('Error renderizando texto VIP, usando fallback:', textError);
+        ctx.font = 'bold 48px Arial, sans-serif';
+        ctx.fillText('VIP', canvasWidth / 2, 220);
+      }
+      ctx.shadowBlur = 0;
+
+      // Fondo semi-transparente para información inferior
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(20, canvasHeight - 80, canvasWidth - 40, 60);
+
+      // Ticket ID en la parte inferior - VISIBLE
+      if (ticketId) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 24px monospace';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 10;
+        try {
+          ctx.fillText(`ID: ${ticketId.toUpperCase()}`, canvasWidth / 2, canvasHeight - 40);
+        } catch (textError) {
+          console.warn('Error renderizando ticketId VIP, usando fallback:', textError);
+          ctx.font = 'bold 20px Arial, sans-serif';
+          ctx.fillText(`ID: ${ticketId}`, canvasWidth / 2, canvasHeight - 40);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // FEST-GO branding - VISIBLE
+      ctx.fillStyle = '#8b4513';
+      ctx.font = 'bold 20px monospace';
+      ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+      ctx.shadowBlur = 8;
+      try {
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 15);
+      } catch (textError) {
+        console.warn('Error renderizando FEST-GO VIP, usando fallback:', textError);
+        ctx.font = 'bold 18px Arial, sans-serif';
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 15);
+      }
+      ctx.shadowBlur = 0;
+
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR VIP, usando QR normal:', error);
@@ -282,6 +359,83 @@ export class TicketsService {
       // === PARTÍCULAS DE MÚSICA FLOTANTES ===
       this.drawFloatingNotes(ctx, canvasWidth, canvasHeight);
 
+      // === TEXTO PROFESIONAL (después de los decorativos) ===
+      
+      // Fondo semi-transparente para el nombre del evento
+      if (eventName) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(20, 30, canvasWidth - 40, 50);
+      }
+
+      // Nombre del evento en la parte superior - MUY VISIBLE
+      if (eventName) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px monospace';
+        ctx.shadowColor = 'rgba(96, 165, 250, 0.8)';
+        ctx.shadowBlur = 15;
+        try {
+          const displayName = eventName.length > 28 ? eventName.substring(0, 25) + '...' : eventName;
+          ctx.fillText(displayName.toUpperCase(), canvasWidth / 2, 60);
+        } catch (textError) {
+          console.warn('Error renderizando nombre del evento Free, usando fallback:', textError);
+          ctx.font = 'bold 24px Arial, sans-serif';
+          ctx.fillText(eventName.substring(0, 25), canvasWidth / 2, 60);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // Fondo semi-transparente para "GRATIS"
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
+      ctx.fillRect(canvasWidth / 2 - 100, 85, 200, 45);
+
+      // Tipo de entrada GRATIS - MUY GRANDE Y VISIBLE
+      ctx.fillStyle = '#22c55e';
+      ctx.font = 'bold 48px monospace';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      ctx.shadowBlur = 20;
+      try {
+        ctx.fillText('GRATIS', canvasWidth / 2, 115);
+      } catch (textError) {
+        console.warn('Error renderizando texto GRATIS, usando fallback:', textError);
+        ctx.font = 'bold 36px Arial, sans-serif';
+        ctx.fillText('GRATIS', canvasWidth / 2, 115);
+      }
+      ctx.shadowBlur = 0;
+
+      // Fondo semi-transparente para información inferior
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(20, canvasHeight - 100, canvasWidth - 40, 70);
+
+      // Ticket ID en la parte inferior - VISIBLE
+      if (ticketId) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px monospace';
+        ctx.shadowColor = 'rgba(34, 197, 94, 0.8)';
+        ctx.shadowBlur = 10;
+        try {
+          ctx.fillText(`ID: ${ticketId.toUpperCase()}`, canvasWidth / 2, canvasHeight - 50);
+        } catch (textError) {
+          console.warn('Error renderizando ticketId Free, usando fallback:', textError);
+          ctx.font = 'bold 20px Arial, sans-serif';
+          ctx.fillText(`ID: ${ticketId}`, canvasWidth / 2, canvasHeight - 50);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // FEST-GO branding - VISIBLE
+      ctx.fillStyle = '#60a5fa';
+      ctx.font = 'bold 22px monospace';
+      ctx.shadowColor = 'rgba(96, 165, 250, 0.6)';
+      ctx.shadowBlur = 8;
+      try {
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 20);
+      } catch (textError) {
+        console.warn('Error renderizando FEST-GO Free, usando fallback:', textError);
+        ctx.font = 'bold 20px Arial, sans-serif';
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 20);
+      }
+      ctx.shadowBlur = 0;
+
       return canvas.toBuffer('image/png');
     } catch (error) {
       console.error('Error generando QR Free, usando QR normal:', error);
@@ -295,6 +449,8 @@ export class TicketsService {
     eventName?: string,
   ): Promise<Buffer> {
     try {
+      console.log('🎨 Generando QR After con textos:', { ticketId, eventName: eventName || 'NO PROPORCIONADO' });
+      
       // Generar QR base con alta calidad
       const qrSize = 300;
       const qrBuffer = await QRCode.toBuffer(qrData, {
@@ -315,8 +471,9 @@ export class TicketsService {
       const canvas = createCanvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext('2d');
 
+      // Configurar contexto de texto
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.textBaseline = 'top';
 
       // === FONDO CON GRADIENTE MORADO/VIOLETA NOCTURNO ===
       const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
@@ -352,36 +509,71 @@ export class TicketsService {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
-      // === TEXTO "AFTER" EN LA PARTE SUPERIOR ===
-      ctx.fillStyle = '#a78bfa';
-      ctx.font = 'bold 48px monospace';
-      ctx.shadowColor = 'rgba(139, 92, 246, 0.6)';
-      ctx.shadowBlur = 15;
-      try {
-        ctx.fillText('AFTER', canvasWidth / 2, 80);
-      } catch (textError) {
-        console.warn('Error renderizando texto AFTER, usando fallback:', textError);
-        ctx.font = 'bold 36px Arial, sans-serif';
-        ctx.fillText('AFTER', canvasWidth / 2, 80);
-      }
-      ctx.shadowBlur = 0;
-
-      // === TEXTO "FEST-GO" EN LA PARTE INFERIOR ===
-      ctx.fillStyle = '#c4b5fd';
-      ctx.font = 'bold 24px monospace';
-      try {
-        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 60);
-      } catch (textError) {
-        console.warn('Error renderizando texto FEST-GO, usando fallback:', textError);
-        ctx.font = 'bold 20px Arial, sans-serif';
-        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 60);
-      }
-
-      // === ELEMENTOS DECORATIVOS NOCTURNOS ===
+      // === ELEMENTOS DECORATIVOS NOCTURNOS (primero los decorativos) ===
       this.drawAfterElements(ctx, canvasWidth, canvasHeight);
 
       // === ESTRELLAS FLOTANTES ===
       this.drawStars(ctx, canvasWidth, canvasHeight);
+
+      // === TEXTO PROFESIONAL (después de los decorativos para que quede encima) ===
+      // IMPORTANTE: Dibujar textos DESPUÉS del QR y decorativos
+      
+      const displayEventName = eventName || 'EVENTO';
+      
+      // Resetear configuración de texto
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      
+      // 1. FONDO Y NOMBRE DEL EVENTO (parte superior)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(20, 30, canvasWidth - 40, 60);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(167, 139, 250, 1)';
+      ctx.shadowBlur = 12;
+      const eventText = displayEventName.length > 26 ? displayEventName.substring(0, 23) + '...' : displayEventName;
+      ctx.fillText(eventText.toUpperCase(), canvasWidth / 2, 50);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto evento dibujado:', eventText);
+
+      // 2. FONDO Y TEXTO "AFTER" (muy grande y visible)
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
+      ctx.fillRect(canvasWidth / 2 - 140, 105, 280, 60);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 52px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 15;
+      ctx.fillText('AFTER', canvasWidth / 2, 115);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto AFTER dibujado');
+
+      // 3. FONDO Y TICKET ID (parte inferior)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(20, canvasHeight - 110, canvasWidth - 40, 80);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(196, 181, 253, 1)';
+      ctx.shadowBlur = 8;
+      const idText = `ID: ${ticketId.toUpperCase()}`;
+      ctx.fillText(idText, canvasWidth / 2, canvasHeight - 80);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto ID dibujado:', idText);
+
+      // 4. FEST-GO branding
+      ctx.fillStyle = '#c4b5fd';
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 40);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto FEST-GO dibujado');
+      
+      console.log('✅ QR After generado exitosamente con todos los textos');
 
       return canvas.toBuffer('image/png');
     } catch (error) {
@@ -655,6 +847,83 @@ export class TicketsService {
 
       // === ELEMENTOS FLOTANTES CORPORATIVOS ===
       this.drawCorporateParticles(ctx, canvasWidth, canvasHeight);
+
+      // === TEXTO PROFESIONAL (después de los decorativos) ===
+      
+      // Fondo semi-transparente para el nombre del evento
+      if (eventName) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(20, 30, canvasWidth - 40, 50);
+      }
+
+      // Nombre del evento en la parte superior - MUY VISIBLE
+      if (eventName) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px monospace';
+        ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+        ctx.shadowBlur = 15;
+        try {
+          const displayName = eventName.length > 28 ? eventName.substring(0, 25) + '...' : eventName;
+          ctx.fillText(displayName.toUpperCase(), canvasWidth / 2, 60);
+        } catch (textError) {
+          console.warn('Error renderizando nombre del evento Normal, usando fallback:', textError);
+          ctx.font = 'bold 26px Arial, sans-serif';
+          ctx.fillText(eventName.substring(0, 25), canvasWidth / 2, 60);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // Fondo semi-transparente para "GENERAL"
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+      ctx.fillRect(canvasWidth / 2 - 120, 90, 240, 50);
+
+      // Tipo de entrada GENERAL - MUY GRANDE Y VISIBLE
+      ctx.fillStyle = '#60a5fa';
+      ctx.font = 'bold 52px monospace';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      ctx.shadowBlur = 20;
+      try {
+        ctx.fillText('GENERAL', canvasWidth / 2, 125);
+      } catch (textError) {
+        console.warn('Error renderizando texto GENERAL, usando fallback:', textError);
+        ctx.font = 'bold 40px Arial, sans-serif';
+        ctx.fillText('GENERAL', canvasWidth / 2, 125);
+      }
+      ctx.shadowBlur = 0;
+
+      // Fondo semi-transparente para información inferior
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(20, canvasHeight - 100, canvasWidth - 40, 70);
+
+      // Ticket ID en la parte inferior - VISIBLE
+      if (ticketId) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px monospace';
+        ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+        ctx.shadowBlur = 10;
+        try {
+          ctx.fillText(`ID: ${ticketId.toUpperCase()}`, canvasWidth / 2, canvasHeight - 50);
+        } catch (textError) {
+          console.warn('Error renderizando ticketId Normal, usando fallback:', textError);
+          ctx.font = 'bold 20px Arial, sans-serif';
+          ctx.fillText(`ID: ${ticketId}`, canvasWidth / 2, canvasHeight - 50);
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // FEST-GO branding - VISIBLE
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = 'bold 22px monospace';
+      ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
+      ctx.shadowBlur = 8;
+      try {
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 20);
+      } catch (textError) {
+        console.warn('Error renderizando FEST-GO Normal, usando fallback:', textError);
+        ctx.font = 'bold 20px Arial, sans-serif';
+        ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 20);
+      }
+      ctx.shadowBlur = 0;
 
       return canvas.toBuffer('image/png');
     } catch (error) {
