@@ -59,6 +59,30 @@ export class ReportsService {
         (sum, sale) => sum + (sale.total || 0),
         0,
       );
+      
+      // Contar tickets VIP y After (necesitamos obtener el batch para cada venta)
+      let vipTicketsSold = 0;
+      let afterTicketsSold = 0;
+      let vipSalesCount = 0;
+      let afterSalesCount = 0;
+      
+      for (const sale of approvedSales) {
+        try {
+          const batch = await this.batchesService.findOne(sale.eventId, sale.batchId);
+          if (batch?.isVip) {
+            vipTicketsSold += sale.quantity || 0;
+            vipSalesCount += 1;
+          }
+          if (batch?.isAfter) {
+            afterTicketsSold += sale.quantity || 0;
+            afterSalesCount += 1;
+          }
+        } catch (error) {
+          // Si no se puede obtener el batch, continuar sin contar
+          console.warn(`No se pudo obtener batch para venta ${sale.id}:`, error);
+        }
+      }
+      
       const salesByEvent = {};
       for (const sale of approvedSales) {
         const eventId = sale.eventId;
@@ -73,6 +97,10 @@ export class ReportsService {
             totalRevenue: 0,
             freeTickets: 0,
             freeSales: 0,
+            vipTickets: 0,
+            vipSales: 0,
+            afterTickets: 0,
+            afterSales: 0,
             batches: {},
           };
         }
@@ -82,6 +110,22 @@ export class ReportsService {
         if (sale.isFree === true) {
           salesByEvent[eventId].freeTickets += sale.quantity;
           salesByEvent[eventId].freeSales += 1;
+        }
+        
+        // Obtener batch para determinar tipo VIP/After
+        try {
+          const batch = await this.batchesService.findOne(eventId, sale.batchId);
+          if (batch?.isVip) {
+            salesByEvent[eventId].vipTickets += sale.quantity || 0;
+            salesByEvent[eventId].vipSales += 1;
+          }
+          if (batch?.isAfter) {
+            salesByEvent[eventId].afterTickets += sale.quantity || 0;
+            salesByEvent[eventId].afterSales += 1;
+          }
+        } catch (error) {
+          // Si no se puede obtener el batch, continuar sin contar
+          console.warn(`No se pudo obtener batch para venta ${sale.id} en evento ${eventId}:`, error);
         }
         const batchId = sale.batchId;
         if (!salesByEvent[eventId].batches[batchId]) {
@@ -103,6 +147,10 @@ export class ReportsService {
         freeTicketsSold,
         freeSalesCount: freeSales.length,
         paidSalesCount: paidSales.length,
+        vipTicketsSold,
+        vipSalesCount,
+        afterTicketsSold,
+        afterSalesCount,
         salesByType,
         salesByEvent,
       };
