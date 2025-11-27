@@ -235,7 +235,29 @@ export class SalesService {
           ticketType = 'After';
         }
         
-        console.log('Creando tickets para venta:', { saleId, isVip, isAfter });
+        // Buscar si existe un batch "after" para el mismo evento (fiesta + after)
+        let afterBatch: any = null;
+        if (!isAfter) {
+          // Solo buscar batch after si el batch actual NO es after
+          try {
+            const allBatches = await this.batchesService.findAll(sale.Item.eventId);
+            afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
+            if (afterBatch) {
+              console.log('Se encontró batch After para el mismo evento:', {
+                eventId: sale.Item.eventId,
+                afterBatchId: afterBatch.batchId,
+                afterBatchName: afterBatch.name,
+              });
+            }
+          } catch (error: any) {
+            console.error('Error al buscar batch After:', error.message);
+            // Continuar sin batch after si hay error
+            afterBatch = null;
+          }
+        }
+        
+        // Crear tickets para el batch principal (fiesta)
+        console.log('Creando tickets para venta (fiesta):', { saleId, isVip, isAfter: false });
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -243,9 +265,50 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
-          isAfter,
+          isAfter: false, // El batch principal nunca es after
         });
-        const ticketIds = tickets.map((ticket) => ticket.ticketId);
+        let ticketIds = tickets.map((ticket) => ticket.ticketId);
+        
+        // Si existe batch after, crear tickets adicionales para el after
+        let afterTickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
+        if (afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
+          try {
+            console.log('Creando tickets para After Party:', {
+              saleId,
+              afterBatchId: afterBatch.batchId,
+              quantity: sale.Item.quantity,
+            });
+            afterTickets = await this.ticketsService.createTickets({
+              id: saleId,
+              userId: sale.Item.userId,
+              eventId: sale.Item.eventId,
+              batchId: afterBatch.batchId,
+              quantity: sale.Item.quantity,
+              isVip: false,
+              isAfter: true, // Estos tickets son para After
+            });
+            const afterTicketIds = afterTickets.map((ticket) => ticket.ticketId);
+            ticketIds = [...ticketIds, ...afterTicketIds];
+            console.log('Tickets After creados exitosamente:', afterTicketIds);
+            
+            // Decrementar tickets del batch after
+            await this.batchesService.decrementTickets(
+              sale.Item.eventId,
+              afterBatch.batchId,
+              sale.Item.quantity,
+            );
+            console.log('Tickets decrementados del batch After');
+          } catch (afterError: any) {
+            console.error('Error al crear tickets After, continuando solo con tickets de fiesta:', afterError.message);
+            // Continuar sin tickets after si hay error
+            afterTickets = [];
+          }
+        } else if (afterBatch && afterBatch.availableTickets < sale.Item.quantity) {
+          console.warn('No hay suficientes tickets disponibles en el batch After:', {
+            available: afterBatch.availableTickets,
+            required: sale.Item.quantity,
+          });
+        }
         console.log('Actualizando tickets de usuario:', {
           userId: sale.Item.userId,
           ticketIds,
@@ -260,8 +323,12 @@ export class SalesService {
         const user = await this.usersService.getUserProfile(sale.Item.userId);
         console.log('Obteniendo evento:', sale.Item.eventId);
         const event = await this.eventsService.findOne(sale.Item.eventId);
+        // Combinar todos los tickets (fiesta + after si existe)
+        const allTickets = [...tickets, ...afterTickets];
+        
+        // Obtener QR attachments para todos los tickets
         const qrAttachments = await Promise.all(
-          tickets.map(async (ticket, index) => {
+          allTickets.map(async (ticket, index) => {
             try {
               const qrKey = ticket.qrS3Url
                 .split('.amazonaws.com/')[1]
@@ -281,9 +348,14 @@ export class SalesService {
               }
               const body = await s3Response.Body.transformToByteArray();
               const buffer = Buffer.from(body);
+              
+              // Determinar prefijo del nombre del archivo según el tipo
+              const isAfterTicket = afterTickets.some(at => at.ticketId === ticket.ticketId);
+              const prefix = isAfterTicket ? 'after' : 'fiesta';
+              
               return {
                 content: buffer.toString('base64'),
-                filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+                filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
                 type: 'image/png',
                 disposition: 'attachment',
                 contentId: `qr-${ticket.ticketId}`,
@@ -300,21 +372,28 @@ export class SalesService {
             }
           }),
         );
+        // Mensaje sobre los QR según si hay batch after
+        const qrMessage = afterBatch 
+          ? `**Códigos QR Únicos**
+Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
+Todos los códigos QR están adjuntos en este correo.`
+          : `**Códigos QR Únicos**
+Los códigos QR de tus tickets están adjuntos en este correo.`;
+        
         const emailBody = `
 Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.
 **Comprobante de Pago**
 - Venta ID: ${saleId}
-- Tipo de entrada: ${ticketType}
+- Tipo de entrada: ${ticketType}${afterBatch ? ' + After Party' : ''}
 - Evento: ${event?.name || 'Desconocido'}
-- Tanda: ${batch?.name || 'Desconocida'}
+- Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
 - Cantidad de tickets: ${sale.Item.quantity}
 - Precio por ticket: $${sale.Item.basePrice}
 - Comisión: $${sale.Item.commission}
 - Importe total abonado: $${sale.Item.total}
 - Tickets: ${ticketIds.join(', ')}
-**Códigos QR Únicos**
-Los códigos QR de tus tickets están adjuntos en este correo.
+${qrMessage}
 ¡Gracias por tu compra!
 Equipo FEST-GO
         `;
@@ -424,7 +503,9 @@ Equipo FEST-GO
                   </table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    Los códigos QR están adjuntos como imágenes. Cada ticket tiene su QR único.
+                    ${afterBatch 
+                      ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos como imágenes.`
+                      : `Los códigos QR están adjuntos como imágenes. Cada ticket tiene su QR único.`}
                   </p>
 
                   <!-- CTA -->
@@ -815,11 +896,33 @@ Equipo FEST-GO
         if (!batch) batch = { name: 'Tanda' };
       }
 
-      // 4. Crear tickets con diseño mejorado para QR free
+      // 3.5. Buscar si existe un batch "after" para el mismo evento (fiesta + after)
+      let afterBatch: any = null;
+      if (!isAfter) {
+        // Solo buscar batch after si el batch actual NO es after
+        try {
+          const allBatches = await this.batchesService.findAll(sale.Item.eventId);
+          afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
+          if (afterBatch) {
+            console.log('Se encontró batch After para el mismo evento (venta gratis):', {
+              eventId: sale.Item.eventId,
+              afterBatchId: afterBatch.batchId,
+              afterBatchName: afterBatch.name,
+            });
+          }
+        } catch (error: any) {
+          console.error('Error al buscar batch After:', error.message);
+          // Continuar sin batch after si hay error
+          afterBatch = null;
+        }
+      }
+
+      // 4. Crear tickets con diseño mejorado para QR free (fiesta)
       let tickets;
       let ticketIds: string[] = [];
+      let afterTickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
       try {
-        console.log('Creando tickets para venta gratis:', { saleId, isVip, isAfter, eventName: event?.name });
+        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isAfter: false, eventName: event?.name });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -827,11 +930,53 @@ Equipo FEST-GO
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
-          isAfter,
+          isAfter: false, // El batch principal nunca es after
           isFree: true, // Marcar como ticket gratis para usar diseño especial
           eventName: event?.name, // Pasar nombre del evento para el QR
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
+        
+        // Si existe batch after, crear tickets adicionales para el after
+        if (afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
+          try {
+            console.log('Creando tickets para After Party (venta gratis):', {
+              saleId,
+              afterBatchId: afterBatch.batchId,
+              quantity: sale.Item.quantity,
+            });
+            afterTickets = await this.ticketsService.createTickets({
+              id: saleId,
+              userId: sale.Item.userId,
+              eventId: sale.Item.eventId,
+              batchId: afterBatch.batchId,
+              quantity: sale.Item.quantity,
+              isVip: false,
+              isAfter: true, // Estos tickets son para After
+              isFree: true, // También son gratis
+              eventName: event?.name,
+            });
+            const afterTicketIds = afterTickets.map((ticket) => ticket.ticketId);
+            ticketIds = [...ticketIds, ...afterTicketIds];
+            console.log('Tickets After creados exitosamente (venta gratis):', afterTicketIds);
+            
+            // Decrementar tickets del batch after
+            await this.batchesService.decrementTickets(
+              sale.Item.eventId,
+              afterBatch.batchId,
+              sale.Item.quantity,
+            );
+            console.log('Tickets decrementados del batch After (venta gratis)');
+          } catch (afterError: any) {
+            console.error('Error al crear tickets After, continuando solo con tickets de fiesta:', afterError.message);
+            // Continuar sin tickets after si hay error
+            afterTickets = [];
+          }
+        } else if (afterBatch && afterBatch.availableTickets < sale.Item.quantity) {
+          console.warn('No hay suficientes tickets disponibles en el batch After (venta gratis):', {
+            available: afterBatch.availableTickets,
+            required: sale.Item.quantity,
+          });
+        }
       } catch (ticketsError: any) {
         console.error('Error al crear tickets:', ticketsError.message);
         throw new HttpException(
@@ -858,10 +1003,13 @@ Equipo FEST-GO
         console.warn('La venta y tickets se crearon, pero falló la actualización de contadores');
       }
 
-      // 6. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+      // 6. Combinar todos los tickets (fiesta + after si existe)
+      const allTickets = [...tickets, ...(afterBatch ? afterTickets : [])];
+      
+      // 7. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
       const qrAttachments: any[] = [];
       await Promise.all(
-        tickets.map(async (ticket, index) => {
+        allTickets.map(async (ticket, index) => {
           try {
             const qrKey = ticket.qrS3Url
               .split('.amazonaws.com/')[1]
@@ -879,9 +1027,14 @@ Equipo FEST-GO
             }
             const body = await s3Response.Body.transformToByteArray();
             const buffer = Buffer.from(body);
+            
+            // Determinar prefijo del nombre del archivo según el tipo
+            const isAfterTicket = afterBatch && afterTickets.some(at => at.ticketId === ticket.ticketId);
+            const prefix = isAfterTicket ? 'after' : 'fiesta';
+            
             qrAttachments.push({
               content: buffer.toString('base64'),
-              filename: `ticket-${index + 1}-${ticket.ticketId}.png`,
+              filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
               type: 'image/png',
               disposition: 'attachment',
               contentId: `qr-${ticket.ticketId}`,
@@ -937,6 +1090,13 @@ Equipo FEST-GO
             ticketType = 'After';
           }
           
+          // Mensaje sobre los QR según si hay batch after
+          const qrMessageFree = afterBatch 
+            ? `Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
+Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
+            : `Los códigos QR de tus tickets están adjuntos en este correo.
+Estos códigos QR son válidos y funcionan igual que los tickets pagos.`;
+          
           const emailBody = `
 Hola ${userName},
 
@@ -950,9 +1110,9 @@ Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es compl
 📋 DETALLES DEL TICKET GRATUITO
 ═══════════════════════════════════════
 • Venta ID: ${saleId}
-• Tipo de entrada: ${ticketType}
+• Tipo de entrada: ${ticketType}${afterBatch ? ' + After Party' : ''}
 • Evento: ${event?.name || 'Desconocido'}
-• Tanda: ${batch?.name || 'Desconocida'}
+• Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
 • Cantidad de tickets: ${sale.Item.quantity}
 • Precio: $0.00 (GRATIS) ✨
 • Tickets: ${ticketIds.join(', ')}
@@ -960,8 +1120,7 @@ Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es compl
 ═══════════════════════════════════════
 📱 CÓDIGOS QR ÚNICOS
 ═══════════════════════════════════════
-Los códigos QR de tus tickets están adjuntos en este correo.
-Estos códigos QR son válidos y funcionan igual que los tickets pagos.
+${qrMessageFree}
 
 ¡Disfruta del evento! 🎊
 
@@ -1037,9 +1196,9 @@ Equipo FEST-GO
                 <td style="padding:20px 24px;">
                   <table role="presentation" width="100%" style="font-family:Arial,Helvetica,sans-serif; font-size:14px;">
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}</span></td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch ? ' + After Party' : ''}</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Precio:</strong> <span style="color:#22c55e; font-weight:bold;">$0.00 (GRATIS)</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td></tr>
@@ -1048,7 +1207,9 @@ Equipo FEST-GO
                   <table role="presentation" width="100%"><tr><td style="border-top:1px solid #1f2937;" height="16"></td></tr></table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.
+                    ${afterBatch 
+                      ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos. Funcionan igual que las entradas pagas.`
+                      : `Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.`}
                   </p>
 
                   <a href="${ticketsPortalUrl}"
