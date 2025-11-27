@@ -347,16 +347,28 @@ export class ReportsService {
                 sales: 0,
                 freeTickets: 0,
                 freeSales: 0,
+                commission: 0, // Se calculará después
               };
             }
-            salesByEvent[eventId].ticketsSold += sale.quantity;
+            salesByEvent[eventId].ticketsSold += sale.quantity || 0;
             salesByEvent[eventId].revenue += sale.total || 0;
             salesByEvent[eventId].sales += 1;
             
             if (sale.isFree === true) {
-              salesByEvent[eventId].freeTickets += sale.quantity;
+              salesByEvent[eventId].freeTickets += sale.quantity || 0;
               salesByEvent[eventId].freeSales += 1;
             }
+          }
+
+          // Calcular comisión por evento (10% del revenue de cada evento)
+          let totalCommission = 0;
+          for (const eventId in salesByEvent) {
+            const eventRevenue = salesByEvent[eventId].revenue || 0;
+            const commission = Number.isFinite(eventRevenue) && eventRevenue > 0
+              ? Math.round(eventRevenue * 0.10) 
+              : 0;
+            salesByEvent[eventId].commission = commission;
+            totalCommission += commission;
           }
 
           return {
@@ -372,7 +384,7 @@ export class ReportsService {
             totalRevenue,
             averageTicketPrice: Math.round(averageTicketPrice * 100) / 100,
               subtotal: Number.isFinite(totalRevenue) ? totalRevenue : 0,
-              commission: Number.isFinite(totalRevenue) ? Math.round(totalRevenue * 0.10) : 0,
+              commission: totalCommission, // Suma de comisiones por evento
             salesTable, // Tabla detallada de ventas
             salesByEvent,
             createdAt: reseller.createdAt,
