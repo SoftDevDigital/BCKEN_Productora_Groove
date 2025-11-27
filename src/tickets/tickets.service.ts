@@ -1071,6 +1071,7 @@ export class TicketsService {
       status: 'valid' | 'invalid';
       message: string;
       isVip?: boolean;
+      isAfter?: boolean;
       ticket?: any;
     }> = [];
     const scanRecords: Array<{
@@ -1078,6 +1079,8 @@ export class TicketsService {
       ticketId: string;
       status: string;
       scannedAt: string;
+      isVip?: boolean;
+      isAfter?: boolean;
     }> = [];
 
     for (const ticketId of ticketIds) {
@@ -1113,6 +1116,11 @@ export class TicketsService {
           if (ticket && ticket.eventId) {
             scanRecord.eventId = ticket.eventId;
           }
+          // Agregar isVip e isAfter al registro de escaneo para poder filtrar después
+          if (ticket) {
+            scanRecord.isVip = ticket.isVip || false;
+            scanRecord.isAfter = ticket.isAfter || false;
+          }
         } catch (eventIdError: any) {
           console.error(`Error al obtener eventId del ticket ${ticketId}:`, eventIdError.message);
           // Continuar sin eventId, no es crítico para el escaneo
@@ -1123,6 +1131,7 @@ export class TicketsService {
           status: 'valid',
           message: 'Ticket válido y marcado como usado',
           isVip: ticket.isVip || false, // Agregar propiedad isVip para el frontend
+          isAfter: ticket.isAfter || false, // Agregar propiedad isAfter para el frontend
           ticket: {
             ticketId: ticket.id,
             saleId: ticket.saleId,
@@ -1132,6 +1141,7 @@ export class TicketsService {
             status: 'used',
             qrS3Url: ticket.qrS3Url,
             isVip: ticket.isVip || false,
+            isAfter: ticket.isAfter || false,
           },
         });
       } catch (error) {
