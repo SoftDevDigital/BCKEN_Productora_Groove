@@ -190,13 +190,12 @@ export class TicketsService {
     isBirthday?: boolean,
   ): Promise<Buffer> {
     try {
-      // Determinar qué imagen usar: cumpleaños o free normal
-      const imageName = isBirthday ? 'qr_cumpleaños.jpg' : 'qr_free.jpg';
-      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', imageName);
+      // Usar siempre la imagen general para QR free y general
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_general.jpg');
       
       if (!fs.existsSync(backgroundImagePath)) {
         console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
-        throw new Error(`Imagen de fondo QR ${isBirthday ? 'Cumpleaños' : 'Free'} no encontrada`);
+        throw new Error('Imagen de fondo QR General no encontrada');
       }
 
       // Cargar imagen de fondo
