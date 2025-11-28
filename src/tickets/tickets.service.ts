@@ -13,6 +13,8 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { createCanvas, loadImage, registerFont } from 'canvas';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class TicketsService {
@@ -257,136 +259,53 @@ export class TicketsService {
     eventName?: string,
   ): Promise<Buffer> {
     try {
+      // Cargar la imagen de fondo desde public/qrs/qr_free.jpg
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_free.jpg');
+      
+      if (!fs.existsSync(backgroundImagePath)) {
+        console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
+        throw new Error('Imagen de fondo QR Free no encontrada');
+      }
+
+      // Cargar imagen de fondo
+      const backgroundImage = await loadImage(backgroundImagePath);
+      const canvasWidth = backgroundImage.width;
+      const canvasHeight = backgroundImage.height;
+
+      // Crear canvas con las dimensiones de la imagen de fondo
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Dibujar la imagen de fondo
+      ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
+
       // Generar QR base con alta calidad
-      const qrSize = 300;
+      // Ajustar tamaño del QR para que encaje en el espacio blanco central
+      // El espacio blanco parece estar en el centro, usar aproximadamente 60% del ancho de la imagen
+      const qrSize = Math.min(canvasWidth * 0.5, canvasHeight * 0.4);
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
-        width: qrSize,
+        width: Math.round(qrSize),
         margin: 2,
         color: {
-          dark: '#1a2332',
+          dark: '#000000',
           light: '#ffffff',
         },
         errorCorrectionLevel: 'H',
       });
 
-      // Dimensiones del poster musical
-      const canvasWidth = 600;
-      const canvasHeight = 800;
-
-      const canvas = createCanvas(canvasWidth, canvasHeight);
-      const ctx = canvas.getContext('2d');
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      // === FONDO CON GRADIENTE OSCURO QUE TE GUSTÓ ===
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-      gradient.addColorStop(0, '#1a2332'); // Azul oscuro en la parte superior
-      gradient.addColorStop(0.5, '#2d3748'); // Gris azulado en el medio
-      gradient.addColorStop(1, '#0f1419'); // Negro en la parte inferior
-
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // === QR CENTRADO ===
+      // Colocar QR en el centro (donde está el espacio blanco)
       const qrX = (canvasWidth - qrSize) / 2;
       const qrY = (canvasHeight - qrSize) / 2;
-
-      // Fondo circular blanco para el QR
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Sombra del QR
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-      ctx.shadowBlur = 15;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 5;
 
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Resetear sombra
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
-      // === DISEÑO MUSICAL EN LOS COSTADOS ===
-      
-      // LADO IZQUIERDO - Notas musicales y ondas de sonido
-      this.drawMusicalElements(ctx, 'left', canvasWidth, canvasHeight);
-      
-      // LADO DERECHO - Elementos musicales decorativos
-      this.drawMusicalElements(ctx, 'right', canvasWidth, canvasHeight);
-
-      // === ELEMENTOS DECORATIVOS SUPERIORES E INFERIORES ===
-      
-      // Ondas de sonido en la parte superior
-      this.drawSoundWaves(ctx, canvasWidth / 2, 100, 180, '#60a5fa', 0.6);
-      
-      // Ondas de sonido en la parte inferior
-      this.drawSoundWaves(ctx, canvasWidth / 2, canvasHeight - 100, 180, '#10b981', 0.6);
-
-      // === PARTÍCULAS DE MÚSICA FLOTANTES ===
-      this.drawFloatingNotes(ctx, canvasWidth, canvasHeight);
-
-      // === TEXTO PROFESIONAL (después de los decorativos) ===
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-      
-      const displayEventName = eventName || 'EVENTO';
-      
-      // 1. FONDO Y NOMBRE DEL EVENTO
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(20, 30, canvasWidth - 40, 55);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 26px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(96, 165, 250, 1)';
-      ctx.shadowBlur = 12;
-      const eventText = displayEventName.length > 26 ? displayEventName.substring(0, 23) + '...' : displayEventName;
-      ctx.fillText(eventText.toUpperCase(), canvasWidth / 2, 45);
-      ctx.shadowBlur = 0;
-
-      // 2. FONDO Y TEXTO "GRATIS"
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
-      ctx.fillRect(canvasWidth / 2 - 110, 95, 220, 55);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 48px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-      ctx.shadowBlur = 18;
-      ctx.fillText('GRATIS', canvasWidth / 2, 105);
-      ctx.shadowBlur = 0;
-
-      // 3. FONDO Y TICKET ID
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(20, canvasHeight - 105, canvasWidth - 40, 75);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(34, 197, 94, 1)';
-      ctx.shadowBlur = 8;
-      const idText = `ID: ${ticketId.toUpperCase()}`;
-      ctx.fillText(idText, canvasWidth / 2, canvasHeight - 75);
-      ctx.shadowBlur = 0;
-
-      // 4. FEST-GO branding
-      ctx.fillStyle = '#60a5fa';
-      ctx.font = 'bold 20px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(96, 165, 250, 0.8)';
-      ctx.shadowBlur = 6;
-      ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 35);
-      ctx.shadowBlur = 0;
-
+      // Retornar la imagen combinada como PNG
       return canvas.toBuffer('image/png');
     } catch (error) {
-      console.error('Error generando QR Free, usando QR normal:', error);
+      console.error('Error generando QR Free con imagen de fondo:', error);
+      // Fallback: generar QR simple si falla
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
   }
