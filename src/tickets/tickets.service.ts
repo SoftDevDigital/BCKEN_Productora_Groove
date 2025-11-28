@@ -156,10 +156,9 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en el rectángulo verde de la parte inferior
-      // El rectángulo verde está en la parte inferior, dentro de una barra marrón
-      // Basándome en la descripción de la imagen, el rectángulo está centrado horizontalmente
-      // y aproximadamente a 5-6% desde la parte inferior
+      // Agregar el ID del ticket en el rectángulo verde/amarillo de la parte inferior
+      // El rectángulo está dentro de una barra marrón en la parte inferior
+      // Ajustar posición para que quede exactamente en el centro del rectángulo
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
@@ -168,10 +167,11 @@ export class TicketsService {
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
-      // Posición centrada horizontalmente y en la parte inferior
-      // El rectángulo verde está aproximadamente a 5-6% desde la parte inferior
+      // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // El rectángulo verde/amarillo está más abajo, aproximadamente a 3-4% desde la parte inferior
+      // Ajustar para que quede dentro del rectángulo señalado
+      const idY = canvasHeight - (canvasHeight * 0.03);
       
       if (ticketId) {
         ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
@@ -234,9 +234,9 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en el rectángulo verde de la parte inferior
-      // El rectángulo verde está en la parte inferior, dentro de una barra marrón
-      // Ajustar posición para que quede exactamente en el centro del rectángulo verde
+      // Agregar el ID del ticket en el rectángulo verde/amarillo de la parte inferior
+      // El rectángulo está dentro de una barra marrón en la parte inferior
+      // Ajustar posición para que quede exactamente en el centro del rectángulo
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
@@ -245,10 +245,11 @@ export class TicketsService {
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
-      // Posición centrada horizontalmente y en la parte inferior
-      // El rectángulo verde está aproximadamente a 5-6% desde la parte inferior
+      // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // El rectángulo verde/amarillo está más abajo, aproximadamente a 3-4% desde la parte inferior
+      // Ajustar para que quede dentro del rectángulo señalado
+      const idY = canvasHeight - (canvasHeight * 0.03);
       
       // Dibujar el ID del ticket con prefijo "ID: "
       ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
@@ -640,9 +641,9 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en el rectángulo verde de la parte inferior
-      // El rectángulo verde está en la parte inferior, dentro de una barra marrón
-      // Ajustar posición para que quede exactamente en el centro del rectángulo verde
+      // Agregar el ID del ticket en el rectángulo verde/amarillo de la parte inferior
+      // El rectángulo está dentro de una barra marrón en la parte inferior
+      // Ajustar posición para que quede exactamente en el centro del rectángulo
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
@@ -651,10 +652,11 @@ export class TicketsService {
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
-      // Posición centrada horizontalmente y en la parte inferior
-      // El rectángulo verde está aproximadamente a 5-6% desde la parte inferior
+      // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // El rectángulo verde/amarillo está más abajo, aproximadamente a 3-4% desde la parte inferior
+      // Ajustar para que quede dentro del rectángulo señalado
+      const idY = canvasHeight - (canvasHeight * 0.03);
       
       ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
 
