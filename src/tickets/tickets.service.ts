@@ -162,15 +162,15 @@ export class TicketsService {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Tamaño de fuente ajustado para que encaje bien en el rectángulo
-      const fontSize = Math.round(canvasWidth * 0.035);
+      // Tamaño de fuente más grande para mejor visibilidad
+      const fontSize = Math.round(canvasWidth * 0.045);
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // Ajuste: el rectángulo amarillo/verde está más arriba, centramos el texto en ~10% desde la parte inferior
-      const idY = canvasHeight - (canvasHeight * 0.10);
+      // Ajuste: subir más el texto, centrado en ~13% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.13);
       
       if (ticketId) {
         ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
@@ -239,15 +239,15 @@ export class TicketsService {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Tamaño de fuente ajustado para que encaje bien en el rectángulo
-      const fontSize = Math.round(canvasWidth * 0.035);
+      // Tamaño de fuente más grande para mejor visibilidad
+      const fontSize = Math.round(canvasWidth * 0.045);
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // Ajuste: el rectángulo amarillo/verde está más arriba, centramos el texto en ~10% desde la parte inferior
-      const idY = canvasHeight - (canvasHeight * 0.10);
+      // Ajuste: subir más el texto, centrado en ~13% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.13);
       
       // Dibujar el ID del ticket con prefijo "ID: "
       ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
