@@ -922,7 +922,7 @@ Equipo FEST-GO
       let ticketIds: string[] = [];
       let afterTickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
       try {
-        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isAfter: false, eventName: event?.name });
+        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isAfter: false, eventName: event?.name, isBirthday: sale.Item.isBirthday });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -932,6 +932,7 @@ Equipo FEST-GO
           isVip,
           isAfter: false, // El batch principal nunca es after
           isFree: true, // Marcar como ticket gratis para usar diseño especial
+          isBirthday: sale.Item.isBirthday || false, // Pasar si es cumpleaños
           eventName: event?.name, // Pasar nombre del evento para el QR
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
