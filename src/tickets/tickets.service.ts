@@ -169,8 +169,8 @@ export class TicketsService {
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // Ajuste: subir más el texto, centrado en ~13% desde la parte inferior
-      const idY = canvasHeight - (canvasHeight * 0.13);
+      // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.11);
       
       if (ticketId) {
         ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
@@ -246,8 +246,8 @@ export class TicketsService {
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // Ajuste: subir más el texto, centrado en ~13% desde la parte inferior
-      const idY = canvasHeight - (canvasHeight * 0.13);
+      // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.11);
       
       // Dibujar el ID del ticket con prefijo "ID: "
       ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
