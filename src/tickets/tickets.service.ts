@@ -169,9 +169,8 @@ export class TicketsService {
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // El rectángulo verde/amarillo está más arriba, aproximadamente a 5-6% desde la parte inferior
-      // Subir el ID para que quede dentro del rectángulo señalado
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // Ajuste: el rectángulo amarillo/verde está más arriba, centramos el texto en ~10% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.10);
       
       if (ticketId) {
         ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
@@ -247,9 +246,8 @@ export class TicketsService {
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // El rectángulo verde/amarillo está más arriba, aproximadamente a 5-6% desde la parte inferior
-      // Subir el ID para que quede dentro del rectángulo señalado
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // Ajuste: el rectángulo amarillo/verde está más arriba, centramos el texto en ~10% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.10);
       
       // Dibujar el ID del ticket con prefijo "ID: "
       ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
