@@ -40,6 +40,7 @@ export class TicketsService {
     batchId: string;
     quantity: number;
     isVip?: boolean;
+    isBackstage?: boolean;
     isAfter?: boolean;
     isFree?: boolean;
     isBirthday?: boolean;
@@ -58,9 +59,13 @@ export class TicketsService {
       
       let qrImageBuffer: Buffer;
       
+      // Prioridad: VIP > Backstage > After > Free > Normal
       if (sale.isVip) {
         // Generar QR VIP con diseño personalizado
         qrImageBuffer = await this.generateVipQr(qrData, ticketId, sale.eventName);
+      } else if (sale.isBackstage) {
+        // Generar QR Backstage con diseño personalizado
+        qrImageBuffer = await this.generateBackstageQr(qrData, ticketId, sale.eventName);
       } else if (sale.isAfter) {
         // Generar QR After con diseño personalizado
         qrImageBuffer = await this.generateAfterQr(qrData, ticketId, sale.eventName);
@@ -74,6 +79,8 @@ export class TicketsService {
       
       const qrKey = sale.isVip 
         ? `qrs/vip/ticket-${ticketId}-${uuidv4()}.png`
+        : sale.isBackstage
+        ? `qrs/backstage/ticket-${ticketId}-${uuidv4()}.png`
         : sale.isAfter
         ? `qrs/after/ticket-${ticketId}-${uuidv4()}.png`
         : sale.isFree
@@ -99,6 +106,7 @@ export class TicketsService {
           batchId: sale.batchId,
           status: 'active',
           isVip: sale.isVip || false,
+          isBackstage: sale.isBackstage || false,
           isAfter: sale.isAfter || false,
           qrS3Url,
           createdAt: new Date().toISOString(),
@@ -397,6 +405,237 @@ export class TicketsService {
       console.error('Error generando QR After, usando QR normal:', error);
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
+  }
+
+  private async generateBackstageQr(
+    qrData: string,
+    ticketId: string,
+    eventName?: string,
+  ): Promise<Buffer> {
+    try {
+      console.log('🎨 Generando QR Backstage con textos:', { ticketId, eventName: eventName || 'NO PROPORCIONADO' });
+      
+      // Generar QR base con alta calidad
+      const qrSize = 300;
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: qrSize,
+        margin: 2,
+        color: {
+          dark: '#1a0000',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'H',
+      });
+
+      // Dimensiones del poster Backstage
+      const canvasWidth = 600;
+      const canvasHeight = 800;
+
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Configurar contexto de texto
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      // === FONDO CON GRADIENTE ROJO/NEGRO EXCLUSIVO ===
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      gradient.addColorStop(0, '#1a0000'); // Negro rojizo muy oscuro en la parte superior
+      gradient.addColorStop(0.3, '#4a0000'); // Rojo muy oscuro
+      gradient.addColorStop(0.6, '#8b0000'); // Rojo oscuro
+      gradient.addColorStop(1, '#000000'); // Negro puro en la parte inferior
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // === QR CENTRADO ===
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      // Fondo circular blanco para el QR con borde rojo
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Borde rojo alrededor del círculo blanco
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Sombra del QR con efecto rojo
+      ctx.shadowColor = 'rgba(220, 38, 38, 0.5)';
+      ctx.shadowBlur = 25;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // Resetear sombra
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // === ELEMENTOS DECORATIVOS EXCLUSIVOS (candados, llaves) ===
+      this.drawBackstageElements(ctx, canvasWidth, canvasHeight);
+
+      // === PARTÍCULAS DE ACCESO EXCLUSIVO ===
+      this.drawExclusiveParticles(ctx, canvasWidth, canvasHeight);
+
+      // === TEXTO PROFESIONAL ===
+      const displayEventName = eventName || 'EVENTO';
+      
+      // Resetear configuración de texto
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      
+      // 1. FONDO Y NOMBRE DEL EVENTO (parte superior)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(20, 30, canvasWidth - 40, 60);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(220, 38, 38, 1)';
+      ctx.shadowBlur = 12;
+      const eventText = displayEventName.length > 26 ? displayEventName.substring(0, 23) + '...' : displayEventName;
+      ctx.fillText(eventText.toUpperCase(), canvasWidth / 2, 50);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto evento dibujado:', eventText);
+
+      // 2. FONDO Y TEXTO "BACKSTAGE" (muy grande y visible)
+      ctx.fillStyle = 'rgba(220, 38, 38, 0.6)';
+      ctx.fillRect(canvasWidth / 2 - 160, 105, 320, 60);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 48px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 15;
+      ctx.fillText('BACKSTAGE', canvasWidth / 2, 115);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto BACKSTAGE dibujado');
+
+      // 3. FONDO Y TICKET ID (parte inferior)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(20, canvasHeight - 110, canvasWidth - 40, 80);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(220, 38, 38, 1)';
+      ctx.shadowBlur = 8;
+      const idText = `ID: ${ticketId.toUpperCase()}`;
+      ctx.fillText(idText, canvasWidth / 2, canvasHeight - 80);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto ID dibujado:', idText);
+
+      // 4. FEST-GO branding
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.shadowColor = 'rgba(139, 0, 0, 0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 40);
+      ctx.shadowBlur = 0;
+      console.log('✅ Texto FEST-GO dibujado');
+      
+      console.log('✅ QR Backstage generado exitosamente con todos los textos');
+
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR Backstage, usando QR normal:', error);
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
+    }
+  }
+
+  // === FUNCIONES AUXILIARES PARA DISEÑO BACKSTAGE ===
+  
+  private drawBackstageElements(ctx: any, canvasWidth: number, canvasHeight: number) {
+    const centerY = canvasHeight / 2;
+    
+    // Colores rojos para elementos exclusivos
+    const redColors = ['#dc2626', '#ef4444', '#f87171', '#fca5a5'];
+    
+    // Dibujar candados decorativos en los costados
+    // Lado izquierdo - candados
+    for (let i = 0; i < 4; i++) {
+      const y = centerY - 120 + (i * 60);
+      const color = redColors[i % redColors.length];
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      
+      // Dibujar candado simple (rectángulo con arco)
+      ctx.beginPath();
+      ctx.rect(40, y, 30, 40);
+      ctx.fill();
+      
+      // Arco del candado
+      ctx.beginPath();
+      ctx.arc(55, y, 15, 0, Math.PI);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    // Lado derecho - llaves
+    for (let i = 0; i < 4; i++) {
+      const y = centerY - 120 + (i * 60);
+      const color = redColors[i % redColors.length];
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      
+      // Dibujar llave simple
+      const keyX = canvasWidth - 70;
+      ctx.beginPath();
+      // Cabeza de la llave (círculo)
+      ctx.arc(keyX + 10, y + 20, 8, 0, Math.PI * 2);
+      ctx.fill();
+      // Cuerpo de la llave
+      ctx.fillRect(keyX + 10, y + 28, 4, 20);
+      // Dientes de la llave
+      ctx.fillRect(keyX + 8, y + 35, 8, 4);
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    ctx.globalAlpha = 1;
+  }
+  
+  private drawExclusiveParticles(ctx: any, canvasWidth: number, canvasHeight: number) {
+    // Partículas flotantes rojas con efecto de resplandor
+    const particles = [
+      { x: 80, y: 150, size: 3 },
+      { x: 520, y: 180, size: 4 },
+      { x: 100, y: 650, size: 2 },
+      { x: 500, y: 680, size: 3 },
+      { x: 150, y: 400, size: 2 },
+      { x: 450, y: 420, size: 3 },
+    ];
+    
+    particles.forEach(particle => {
+      ctx.fillStyle = '#dc2626';
+      ctx.globalAlpha = 0.6;
+      ctx.shadowColor = '#dc2626';
+      ctx.shadowBlur = 8;
+      
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.shadowBlur = 0;
+    });
+    
+    ctx.globalAlpha = 1;
   }
 
   // === FUNCIONES AUXILIARES PARA DISEÑO AFTER ===
