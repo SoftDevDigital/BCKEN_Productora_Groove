@@ -226,11 +226,14 @@ export class SalesService {
         );
         const isVip = batch?.isVip || false;
         const isAfter = batch?.isAfter || false;
+        const isBackstage = batch?.isBackstage || false;
         
         // Determinar tipo de entrada para mostrar en el email
         let ticketType = 'General';
         if (isVip) {
           ticketType = 'VIP';
+        } else if (isBackstage) {
+          ticketType = 'Backstage';
         } else if (isAfter) {
           ticketType = 'After';
         }
@@ -257,7 +260,7 @@ export class SalesService {
         }
         
         // Crear tickets para el batch principal (fiesta)
-        console.log('Creando tickets para venta (fiesta):', { saleId, isVip, isAfter: false });
+        console.log('Creando tickets para venta (fiesta):', { saleId, isVip, isBackstage, isAfter: false });
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -265,6 +268,7 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
+          isBackstage,
           isAfter: false, // El batch principal nunca es after
         });
         let ticketIds = tickets.map((ticket) => ticket.ticketId);
@@ -861,12 +865,13 @@ Equipo FEST-GO
         );
       }
 
-      // 2. Obtener batch para verificar si es VIP o After (también se usa para el email)
+      // 2. Obtener batch para verificar si es VIP, Backstage o After (también se usa para el email)
       let isVip = false;
+      let isBackstage = false;
       let isAfter = false;
       let batch;
       try {
-        console.log('Obteniendo tanda para verificar VIP/After (venta gratis):', {
+        console.log('Obteniendo tanda para verificar VIP/Backstage/After (venta gratis):', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
@@ -875,10 +880,13 @@ Equipo FEST-GO
           sale.Item.batchId,
         );
         isVip = batch?.isVip || false;
+        isBackstage = batch?.isBackstage || false;
         isAfter = batch?.isAfter || false;
       } catch (batchError: any) {
-        console.error('Error al obtener batch, asumiendo no VIP/After:', batchError.message);
+        console.error('Error al obtener batch, asumiendo no VIP/Backstage/After:', batchError.message);
         batch = { name: 'Tanda' }; // Valor por defecto para el email
+        isVip = false;
+        isBackstage = false;
         isAfter = false;
       }
 
@@ -922,7 +930,7 @@ Equipo FEST-GO
       let ticketIds: string[] = [];
       let afterTickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
       try {
-        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isAfter: false, eventName: event?.name, isBirthday: sale.Item.isBirthday });
+        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isBackstage, isAfter: false, eventName: event?.name, isBirthday: sale.Item.isBirthday });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -930,6 +938,7 @@ Equipo FEST-GO
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
+          isBackstage,
           isAfter: false, // El batch principal nunca es after
           isFree: true, // Marcar como ticket gratis para usar diseño especial
           isBirthday: sale.Item.isBirthday || false, // Pasar si es cumpleaños
@@ -1087,6 +1096,8 @@ Equipo FEST-GO
           let ticketType = 'General';
           if (isVip) {
             ticketType = 'VIP';
+          } else if (isBackstage) {
+            ticketType = 'Backstage';
           } else if (isAfter) {
             ticketType = 'After';
           }

@@ -32,6 +32,10 @@ export class UpdateBatchDto {
   isAfter?: boolean; // Indica si la tanda es After
 
   @IsOptional()
+  @IsBoolean()
+  isBackstage?: boolean; // Indica si la tanda es Backstage
+
+  @IsOptional()
   @IsDateString()
   startTime?: string; // Horario de inicio de la tanda (formato ISO)
 
