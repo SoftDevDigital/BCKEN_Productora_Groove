@@ -239,9 +239,10 @@ export class SalesService {
         }
         
         // Buscar si existe un batch "after" para el mismo evento (fiesta + after)
+        // IMPORTANTE: NO buscar batch After si es Backstage (Backstage es independiente)
         let afterBatch: any = null;
-        if (!isAfter) {
-          // Solo buscar batch after si el batch actual NO es after
+        if (!isAfter && !isBackstage) {
+          // Solo buscar batch after si el batch actual NO es after y NO es backstage
           try {
             const allBatches = await this.batchesService.findAll(sale.Item.eventId);
             afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
@@ -257,6 +258,8 @@ export class SalesService {
             // Continuar sin batch after si hay error
             afterBatch = null;
           }
+        } else if (isBackstage) {
+          console.log('Es Backstage, no se buscará batch After (Backstage es independiente)');
         }
         
         // Crear tickets para el batch principal (fiesta)
@@ -376,8 +379,8 @@ export class SalesService {
             }
           }),
         );
-        // Mensaje sobre los QR según si hay batch after
-        const qrMessage = afterBatch 
+        // Mensaje sobre los QR según si hay batch after (pero NO si es Backstage)
+        const qrMessage = afterBatch && !isBackstage
           ? `**Códigos QR Únicos**
 Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
 Todos los códigos QR están adjuntos en este correo.`
@@ -389,9 +392,9 @@ Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.
 **Comprobante de Pago**
 - Venta ID: ${saleId}
-- Tipo de entrada: ${ticketType}${afterBatch ? ' + After Party' : ''}
+- Tipo de entrada: ${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}
 - Evento: ${event?.name || 'Desconocido'}
-- Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
+- Tanda: ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}
 - Cantidad de tickets: ${sale.Item.quantity}
 - Precio por ticket: $${sale.Item.basePrice}
 - Comisión: $${sale.Item.commission}
@@ -479,7 +482,7 @@ Equipo FEST-GO
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td>
                     </tr>
                     <tr>
-                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}</span></td>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}</span></td>
                     </tr>
                     <tr>
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td>
@@ -507,7 +510,7 @@ Equipo FEST-GO
                   </table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    ${afterBatch 
+                    ${afterBatch && !isBackstage
                       ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos como imágenes.`
                       : `Los códigos QR están adjuntos como imágenes. Cada ticket tiene su QR único.`}
                   </p>
@@ -905,9 +908,10 @@ Equipo FEST-GO
       }
 
       // 3.5. Buscar si existe un batch "after" para el mismo evento (fiesta + after)
+      // IMPORTANTE: NO buscar batch After si es Backstage (Backstage es independiente)
       let afterBatch: any = null;
-      if (!isAfter) {
-        // Solo buscar batch after si el batch actual NO es after
+      if (!isAfter && !isBackstage) {
+        // Solo buscar batch after si el batch actual NO es after y NO es backstage
         try {
           const allBatches = await this.batchesService.findAll(sale.Item.eventId);
           afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
@@ -923,6 +927,8 @@ Equipo FEST-GO
           // Continuar sin batch after si hay error
           afterBatch = null;
         }
+      } else if (isBackstage) {
+        console.log('Es Backstage, no se buscará batch After (Backstage es independiente)');
       }
 
       // 4. Crear tickets con diseño mejorado para QR free (fiesta)
@@ -1102,8 +1108,8 @@ Equipo FEST-GO
             ticketType = 'After';
           }
           
-          // Mensaje sobre los QR según si hay batch after
-          const qrMessageFree = afterBatch 
+          // Mensaje sobre los QR según si hay batch after (pero NO si es Backstage)
+          const qrMessageFree = afterBatch && !isBackstage
             ? `Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
 Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
             : `Los códigos QR de tus tickets están adjuntos en este correo.
@@ -1122,9 +1128,9 @@ Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es compl
 📋 DETALLES DEL TICKET GRATUITO
 ═══════════════════════════════════════
 • Venta ID: ${saleId}
-• Tipo de entrada: ${ticketType}${afterBatch ? ' + After Party' : ''}
+• Tipo de entrada: ${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}
 • Evento: ${event?.name || 'Desconocido'}
-• Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
+• Tanda: ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}
 • Cantidad de tickets: ${sale.Item.quantity}
 • Precio: $0.00 (GRATIS) ✨
 • Tickets: ${ticketIds.join(', ')}
@@ -1208,9 +1214,9 @@ Equipo FEST-GO
                 <td style="padding:20px 24px;">
                   <table role="presentation" width="100%" style="font-family:Arial,Helvetica,sans-serif; font-size:14px;">
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch ? ' + After Party' : ''}</span></td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Precio:</strong> <span style="color:#22c55e; font-weight:bold;">$0.00 (GRATIS)</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td></tr>
@@ -1219,7 +1225,7 @@ Equipo FEST-GO
                   <table role="presentation" width="100%"><tr><td style="border-top:1px solid #1f2937;" height="16"></td></tr></table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    ${afterBatch 
+                    ${afterBatch && !isBackstage
                       ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos. Funcionan igual que las entradas pagas.`
                       : `Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.`}
                   </p>

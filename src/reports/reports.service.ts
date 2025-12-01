@@ -60,10 +60,12 @@ export class ReportsService {
         0,
       );
       
-      // Contar tickets VIP y After (necesitamos obtener el batch para cada venta)
+      // Contar tickets VIP, Backstage y After (necesitamos obtener el batch para cada venta)
       let vipTicketsSold = 0;
+      let backstageTicketsSold = 0;
       let afterTicketsSold = 0;
       let vipSalesCount = 0;
+      let backstageSalesCount = 0;
       let afterSalesCount = 0;
       
       for (const sale of approvedSales) {
@@ -72,6 +74,10 @@ export class ReportsService {
           if (batch?.isVip) {
             vipTicketsSold += sale.quantity || 0;
             vipSalesCount += 1;
+          }
+          if (batch?.isBackstage) {
+            backstageTicketsSold += sale.quantity || 0;
+            backstageSalesCount += 1;
           }
           if (batch?.isAfter) {
             afterTicketsSold += sale.quantity || 0;
@@ -99,6 +105,8 @@ export class ReportsService {
             freeSales: 0,
             vipTickets: 0,
             vipSales: 0,
+            backstageTickets: 0,
+            backstageSales: 0,
             afterTickets: 0,
             afterSales: 0,
             batches: {},
@@ -112,12 +120,16 @@ export class ReportsService {
           salesByEvent[eventId].freeSales += 1;
         }
         
-        // Obtener batch para determinar tipo VIP/After
+        // Obtener batch para determinar tipo VIP/Backstage/After
         try {
           const batch = await this.batchesService.findOne(eventId, sale.batchId);
           if (batch?.isVip) {
             salesByEvent[eventId].vipTickets += sale.quantity || 0;
             salesByEvent[eventId].vipSales += 1;
+          }
+          if (batch?.isBackstage) {
+            salesByEvent[eventId].backstageTickets += sale.quantity || 0;
+            salesByEvent[eventId].backstageSales += 1;
           }
           if (batch?.isAfter) {
             salesByEvent[eventId].afterTickets += sale.quantity || 0;
@@ -149,6 +161,8 @@ export class ReportsService {
         paidSalesCount: paidSales.length,
         vipTicketsSold,
         vipSalesCount,
+        backstageTicketsSold,
+        backstageSalesCount,
         afterTicketsSold,
         afterSalesCount,
         salesByType,
