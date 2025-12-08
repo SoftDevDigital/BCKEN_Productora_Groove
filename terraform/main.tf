@@ -1,3 +1,77 @@
+# ============================================================================
+# TERRAFORM CONFIGURATION
+# ============================================================================
+terraform {
+  required_version = ">= 1.0"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
+  }
+}
+
+# ============================================================================
+# PROVIDER CONFIGURATION
+# ============================================================================
+provider "aws" {
+  region = var.aws_region
+  
+  # Si use_local es true, usar LocalStack
+  dynamic "endpoints" {
+    for_each = var.use_local ? [1] : []
+    content {
+      dynamodb     = "http://localhost:4566"
+      s3           = "http://localhost:4566"
+      lambda       = "http://localhost:4566"
+      apigatewayv2 = "http://localhost:4566"
+      ses          = "http://localhost:4566"
+      iam          = "http://localhost:4566"
+    }
+  }
+  
+  # Credenciales dummy para LocalStack
+  access_key = var.use_local ? "test" : null
+  secret_key = var.use_local ? "test" : null
+  
+  # Skip credentials validation para LocalStack
+  skip_credentials_validation = var.use_local
+  skip_metadata_api_check     = var.use_local
+  skip_region_validation      = var.use_local
+}
+
+# Provider para archive (usado para crear el zip de Lambda)
+provider "archive" {}
+
+# ============================================================================
+# VARIABLES
+# ============================================================================
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "use_local" {
+  description = "Use LocalStack instead of real AWS"
+  type        = bool
+  default     = false
+}
+
+variable "mercado_pago_access_token" {
+  description = "Mercado Pago access token (required)"
+  type        = string
+  sensitive   = true
+}
+
+# ============================================================================
+# S3 BUCKET
+# ============================================================================
 # S3 Bucket para QR y comprobantes
 resource "aws_s3_bucket" "ticket_bucket" {
   bucket = "ticket-qr-bucket-dev-v2"
@@ -70,87 +144,144 @@ resource "aws_s3_bucket_lifecycle_configuration" "ticket_bucket_lifecycle" {
   }
 }
 
-# DynamoDB tablas
+# ============================================================================
+# DYNAMODB TABLES
+# ============================================================================
+# Todas las tablas usadas por la aplicación
+
+# Tabla de Tickets
 resource "aws_dynamodb_table" "tickets_table" {
-  name = "Tickets-v2"
+  name         = "Tickets-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "id"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "S"
   }
+
+  tags = {
+    Name        = "Tickets-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
+  }
 }
 
+# Tabla de Escaneos de Tickets
 resource "aws_dynamodb_table" "ticket_scans_table" {
-  name = "TicketScans-v2"
+  name         = "TicketScans-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "id"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "S"
+  }
+
+  tags = {
+    Name        = "TicketScans-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
   }
 }
 
+# Tabla de Usuarios
 resource "aws_dynamodb_table" "users_table" {
-  name = "Users-v2"
+  name         = "Users-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "id"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "S"
   }
+
   attribute {
     name = "email"
     type = "S"
   }
+
   attribute {
     name = "alias"
     type = "S"
   }
+
   global_secondary_index {
-    name = "EmailIndex"
+    name     = "EmailIndex"
     hash_key = "email"
     projection_type = "ALL"
   }
+
   global_secondary_index {
-    name = "AliasIndex"
+    name     = "AliasIndex"
     hash_key = "alias"
     projection_type = "ALL"
   }
+
+  tags = {
+    Name        = "Users-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
+  }
 }
 
+# Tabla de Ventas
 resource "aws_dynamodb_table" "sales_table" {
-  name = "Sales-v2"
+  name         = "Sales-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "id"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "S"
   }
+
+  tags = {
+    Name        = "Sales-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
+  }
 }
 
+# Tabla de Eventos
 resource "aws_dynamodb_table" "events_table" {
-  name = "Events-v2"
+  name         = "Events-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "id"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "S"
   }
+
+  tags = {
+    Name        = "Events-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
+  }
 }
 
+# Tabla de Batches (Tandas)
 resource "aws_dynamodb_table" "batches_table" {
-  name = "Batches-v2"
+  name         = "Batches-v2"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key = "eventId"
-  range_key = "batchId"
+  hash_key     = "eventId"
+  range_key    = "batchId"
+
   attribute {
     name = "eventId"
     type = "S"
   }
+
   attribute {
     name = "batchId"
     type = "S"
+  }
+
+  tags = {
+    Name        = "Batches-v2"
+    Environment = "dev"
+    Service     = "ticket-backend"
   }
 }
 
@@ -295,7 +426,7 @@ resource "aws_lambda_function" "ticket_backend" {
       COGNITO_USER_POOL_ID = aws_cognito_user_pool.ticket_user_pool.id
       COGNITO_CLIENT_ID = aws_cognito_user_pool_client.ticket_app_client.id
       COGNITO_CLIENT_SECRET = aws_cognito_user_pool_client.ticket_app_client.client_secret
-      MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-8581189409054279-091018-c6d03928f1a9466fb3fbc1cdbcf80512-2369426390"
+      MERCADO_PAGO_ACCESS_TOKEN = var.mercado_pago_access_token
       API_BASE_URL = "http://localhost:3001"
       S3_BUCKET = aws_s3_bucket.ticket_bucket.bucket
       SES_EMAIL = "alexis@laikad.com"
@@ -544,6 +675,100 @@ resource "aws_apigatewayv2_route" "admin_reports_sale_details" {
 resource "aws_apigatewayv2_route" "admin_reports_users" {
   api_id = aws_apigatewayv2_api.ticket_api.id
   route_key = "GET /admin/reports/users"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Rutas adicionales de Reports
+resource "aws_apigatewayv2_route" "admin_reports_resellers" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /admin/reports/resellers"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+resource "aws_apigatewayv2_route" "admin_reports_scans_event" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /admin/reports/scans/{eventId}"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+resource "aws_apigatewayv2_route" "admin_reports_scans" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /admin/reports/scans"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+resource "aws_apigatewayv2_route" "admin_reports_free_qr" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /admin/reports/free-qr"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+resource "aws_apigatewayv2_route" "admin_reports_birthdays" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /admin/reports/birthdays"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Rutas de Sales adicionales
+resource "aws_apigatewayv2_route" "sales_admin_free" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "POST /sales/admin/free"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Rutas de Auth adicionales
+resource "aws_apigatewayv2_route" "auth_admin_sync_roles" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "POST /auth/admin/sync-roles"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+
+resource "aws_apigatewayv2_route" "user_sales" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /user/sales"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Rutas de Tickets
+resource "aws_apigatewayv2_route" "tickets_get_qr" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /tickets/{ticketId}/qr"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+resource "aws_apigatewayv2_route" "tickets_admin_scan" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "POST /tickets/admin/scan"
+  target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Rutas de Events adicionales
+resource "aws_apigatewayv2_route" "events_debug" {
+  api_id = aws_apigatewayv2_api.ticket_api.id
+  route_key = "GET /events/debug"
   target = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
   authorization_type = "JWT"
   authorizer_id = aws_apigatewayv2_authorizer.cognito_authorizer.id

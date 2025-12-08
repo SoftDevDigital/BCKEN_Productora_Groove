@@ -60,3 +60,14 @@ volume/
 
 # Serverless
 .serverless/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars

@@ -1,0 +1,13 @@
+# Variables de configuración para Terraform
+# Copia este archivo a terraform.tfvars y completa los valores
+
+# Región de AWS
+aws_region = "us-east-1"
+
+# Usar LocalStack para desarrollo local (true/false)
+use_local = false
+
+# Token de acceso de Mercado Pago
+# Obtén este token desde el panel de Mercado Pago
+mercado_pago_access_token = "TU_TOKEN_DE_MERCADO_PAGO_AQUI"
+
