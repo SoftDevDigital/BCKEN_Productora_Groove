@@ -95,8 +95,12 @@ export class EventsController {
         data: events,
       };
     } catch (error) {
+      console.error('Error en findAll eventos controller:', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
-        'Error al obtener eventos',
+        `Error al obtener eventos: ${error?.message || 'Error desconocido'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

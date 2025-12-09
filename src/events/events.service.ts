@@ -117,8 +117,15 @@ export class EventsService {
       const result = await this.docClient.send(new ScanCommand(params));
       return result.Items || [];
     } catch (error) {
+      console.error('Error en findAll eventos:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        name: error?.name,
+        code: error?.code,
+        tableName: this.tableName,
+      });
       throw new HttpException(
-        'Error al obtener eventos',
+        `Error al obtener eventos: ${error?.message || 'Error desconocido'}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
