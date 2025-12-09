@@ -413,141 +413,67 @@ export class TicketsService {
     eventName?: string,
   ): Promise<Buffer> {
     try {
-      console.log('🎨 Generando QR Backstage con textos:', { ticketId, eventName: eventName || 'NO PROPORCIONADO' });
+      // Cargar la imagen de fondo desde public/qrs/qr_backstage.jpg
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_backstage.jpg');
       
+      if (!fs.existsSync(backgroundImagePath)) {
+        console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
+        throw new Error('Imagen de fondo QR Backstage no encontrada');
+      }
+
+      // Cargar imagen de fondo
+      const backgroundImage = await loadImage(backgroundImagePath);
+      const canvasWidth = backgroundImage.width;
+      const canvasHeight = backgroundImage.height;
+
+      // Crear canvas con las dimensiones de la imagen de fondo
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Dibujar la imagen de fondo
+      ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
+
       // Generar QR base con alta calidad
-      const qrSize = 300;
+      // Ajustar tamaño del QR para que encaje en el espacio blanco central
+      const qrSize = Math.min(canvasWidth * 0.5, canvasHeight * 0.4);
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
-        width: qrSize,
+        width: Math.round(qrSize),
         margin: 2,
         color: {
-          dark: '#1a0000',
+          dark: '#000000',
           light: '#ffffff',
         },
         errorCorrectionLevel: 'H',
       });
 
-      // Dimensiones del poster Backstage
-      const canvasWidth = 600;
-      const canvasHeight = 800;
-
-      const canvas = createCanvas(canvasWidth, canvasHeight);
-      const ctx = canvas.getContext('2d');
-
-      // Configurar contexto de texto
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-
-      // === FONDO CON GRADIENTE ROJO/NEGRO EXCLUSIVO ===
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-      gradient.addColorStop(0, '#1a0000'); // Negro rojizo muy oscuro en la parte superior
-      gradient.addColorStop(0.3, '#4a0000'); // Rojo muy oscuro
-      gradient.addColorStop(0.6, '#8b0000'); // Rojo oscuro
-      gradient.addColorStop(1, '#000000'); // Negro puro en la parte inferior
-
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // === QR CENTRADO ===
+      // Colocar QR en el centro (donde está el espacio blanco)
       const qrX = (canvasWidth - qrSize) / 2;
       const qrY = (canvasHeight - qrSize) / 2;
-
-      // Fondo circular blanco para el QR con borde rojo
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Borde rojo alrededor del círculo blanco
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Sombra del QR con efecto rojo
-      ctx.shadowColor = 'rgba(220, 38, 38, 0.5)';
-      ctx.shadowBlur = 25;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 5;
 
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Resetear sombra
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
-      // === ELEMENTOS DECORATIVOS EXCLUSIVOS (candados, llaves) ===
-      this.drawBackstageElements(ctx, canvasWidth, canvasHeight);
-
-      // === PARTÍCULAS DE ACCESO EXCLUSIVO ===
-      this.drawExclusiveParticles(ctx, canvasWidth, canvasHeight);
-
-      // === TEXTO PROFESIONAL ===
-      const displayEventName = eventName || 'EVENTO';
-      
-      // Resetear configuración de texto
+      // Agregar el ID del ticket en su posición específica
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
+      ctx.textBaseline = 'middle';
       
-      // 1. FONDO Y NOMBRE DEL EVENTO (parte superior)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(20, 30, canvasWidth - 40, 60);
+      // Tamaño de fuente ajustado para que encaje bien
+      const fontSize = Math.round(canvasWidth * 0.045);
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 26px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(220, 38, 38, 1)';
-      ctx.shadowBlur = 12;
-      const eventText = displayEventName.length > 26 ? displayEventName.substring(0, 23) + '...' : displayEventName;
-      ctx.fillText(eventText.toUpperCase(), canvasWidth / 2, 50);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto evento dibujado:', eventText);
-
-      // 2. FONDO Y TEXTO "BACKSTAGE" (muy grande y visible)
-      ctx.fillStyle = 'rgba(220, 38, 38, 0.6)';
-      ctx.fillRect(canvasWidth / 2 - 160, 105, 320, 60);
+      // Posición centrada horizontalmente
+      const idX = canvasWidth / 2;
+      // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.11);
       
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 48px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-      ctx.shadowBlur = 15;
-      ctx.fillText('BACKSTAGE', canvasWidth / 2, 115);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto BACKSTAGE dibujado');
-
-      // 3. FONDO Y TICKET ID (parte inferior)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(20, canvasHeight - 110, canvasWidth - 40, 80);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(220, 38, 38, 1)';
-      ctx.shadowBlur = 8;
-      const idText = `ID: ${ticketId.toUpperCase()}`;
-      ctx.fillText(idText, canvasWidth / 2, canvasHeight - 80);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto ID dibujado:', idText);
-
-      // 4. FEST-GO branding
-      ctx.fillStyle = '#dc2626';
-      ctx.font = 'bold 20px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(139, 0, 0, 0.8)';
-      ctx.shadowBlur = 6;
-      ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 40);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto FEST-GO dibujado');
-      
-      console.log('✅ QR Backstage generado exitosamente con todos los textos');
+      ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
 
       return canvas.toBuffer('image/png');
     } catch (error) {
-      console.error('Error generando QR Backstage, usando QR normal:', error);
+      console.error('Error generando QR Backstage con imagen de fondo:', error);
+      // Fallback: generar QR simple si falla
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
   }
