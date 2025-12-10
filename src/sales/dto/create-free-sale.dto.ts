@@ -21,5 +21,9 @@ export class CreateFreeSaleDto {
   @IsOptional()
   @IsString()
   birthdayPersonName?: string; // Nombre del cumpleañero (si isBirthday = true)
+
+  @IsOptional()
+  @IsBoolean()
+  isBackstage?: boolean; // Indica si es un ticket Backstage (asignación especial del admin)
 }
 

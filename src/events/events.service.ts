@@ -30,9 +30,37 @@ export class EventsService {
     private readonly configService: ConfigService,
   ) {
     this.docClient = DynamoDBDocumentClient.from(dynamoDbClient);
-    this.s3Client = new S3Client({
-      region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
-    });
+    
+    // Configurar S3Client con la misma lógica que DynamoDBClient
+    const region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
+    const endpoint = this.configService.get<string>('AWS_ENDPOINT_URL');
+    
+    const s3Config: any = {
+      region,
+    };
+    
+    // Solo usar LocalStack si hay endpoint URL explícitamente configurado
+    if (endpoint && endpoint.includes('localhost:4566')) {
+      s3Config.endpoint = endpoint;
+      s3Config.credentials = {
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+      };
+    } else {
+      // Usar credenciales desde variables de entorno
+      const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+      const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+      
+      if (accessKeyId && secretAccessKey) {
+        s3Config.credentials = {
+          accessKeyId,
+          secretAccessKey,
+        };
+      }
+      // Si no hay credenciales explícitas, AWS SDK usará las credenciales por defecto
+    }
+    
+    this.s3Client = new S3Client(s3Config);
     this.bucketName =
       this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
   }

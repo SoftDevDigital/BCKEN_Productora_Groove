@@ -59,21 +59,31 @@ export class TicketsService {
       
       let qrImageBuffer: Buffer;
       
-      // Prioridad: VIP > Backstage > After > Free > Normal
+      // Lógica de decisión de QR:
+      // Prioridad: VIP > Backstage > After > Cumpleaños > Free (General) > Normal (General)
       if (sale.isVip) {
         // Generar QR VIP con diseño personalizado
+        console.log(`   🎨 Generando QR VIP...`);
         qrImageBuffer = await this.generateVipQr(qrData, ticketId, sale.eventName);
       } else if (sale.isBackstage) {
-        // Generar QR Backstage con diseño personalizado
+        // Generar QR Backstage con diseño personalizado (asignación especial del admin)
+        console.log(`   🎨 Generando QR Backstage...`);
         qrImageBuffer = await this.generateBackstageQr(qrData, ticketId, sale.eventName);
       } else if (sale.isAfter) {
         // Generar QR After con diseño personalizado
+        console.log(`   🎨 Generando QR After...`);
         qrImageBuffer = await this.generateAfterQr(qrData, ticketId, sale.eventName);
+      } else if (sale.isBirthday) {
+        // Generar QR Cumpleaños con imagen especial (asignación especial del admin)
+        console.log(`   🎨 Generando QR Cumpleaños...`);
+        qrImageBuffer = await this.generateBirthdayQr(qrData, ticketId, sale.eventName);
       } else if (sale.isFree) {
-        // Generar QR Free con diseño personalizado mejorado
-        qrImageBuffer = await this.generateFreeQr(qrData, ticketId, sale.eventName, sale.isBirthday);
+        // Generar QR Free simple (regalo del admin, sin diseño especial) → QR GENERAL
+        console.log(`   🎨 Generando QR GENERAL (Free simple)...`);
+        qrImageBuffer = await this.generateNormalQr(qrData, ticketId, sale.eventName);
       } else {
         // QR normal (General) con diseño elegante
+        console.log(`   🎨 Generando QR GENERAL (Normal)...`);
         qrImageBuffer = await this.generateNormalQr(qrData, ticketId, sale.eventName);
       }
       
@@ -83,9 +93,13 @@ export class TicketsService {
         ? `qrs/backstage/ticket-${ticketId}-${uuidv4()}.png`
         : sale.isAfter
         ? `qrs/after/ticket-${ticketId}-${uuidv4()}.png`
-        : sale.isFree
+        : sale.isFree || sale.isBirthday
         ? `qrs/free/ticket-${ticketId}-${uuidv4()}.png`
         : `qrs/ticket-${ticketId}-${uuidv4()}.png`;
+      
+      console.log(`   📤 Subiendo QR a S3: ${qrKey}`);
+      console.log(`      Bucket: ${bucket}`);
+      console.log(`      Tamaño del buffer: ${qrImageBuffer.length} bytes`);
       
       await this.s3Client.send(
         new PutObjectCommand({
@@ -95,7 +109,10 @@ export class TicketsService {
           ContentType: 'image/png',
         }),
       );
+      
       const qrS3Url = `https://${bucket}.s3.amazonaws.com/${qrKey}`;
+      console.log(`   ✅ QR subido exitosamente a S3`);
+      console.log(`      URL: ${qrS3Url}`);
       const params = {
         TableName: this.tableName,
         Item: {
@@ -106,7 +123,6 @@ export class TicketsService {
           batchId: sale.batchId,
           status: 'active',
           isVip: sale.isVip || false,
-          isBackstage: sale.isBackstage || false,
           isAfter: sale.isAfter || false,
           qrS3Url,
           createdAt: new Date().toISOString(),
@@ -191,25 +207,28 @@ export class TicketsService {
     }
   }
 
-  private async generateFreeQr(
+  private async generateBackstageQr(
     qrData: string,
     ticketId: string,
     eventName?: string,
-    isBirthday?: boolean,
   ): Promise<Buffer> {
     try {
-      // Usar siempre la imagen general para QR free y general
-      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_general.jpg');
+      // Cargar la imagen de fondo desde public/qrs/qr_backstage.jpg
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_backstage.jpg');
+      
+      console.log(`   📷 Cargando imagen Backstage: ${backgroundImagePath}`);
       
       if (!fs.existsSync(backgroundImagePath)) {
         console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
-        throw new Error('Imagen de fondo QR General no encontrada');
+        throw new Error('Imagen de fondo QR Backstage no encontrada');
       }
 
       // Cargar imagen de fondo
       const backgroundImage = await loadImage(backgroundImagePath);
       const canvasWidth = backgroundImage.width;
       const canvasHeight = backgroundImage.height;
+
+      console.log(`   ✅ Imagen Backstage cargada: ${canvasWidth}x${canvasHeight}`);
 
       // Crear canvas con las dimensiones de la imagen de fondo
       const canvas = createCanvas(canvasWidth, canvasHeight);
@@ -219,8 +238,6 @@ export class TicketsService {
       ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
 
       // Generar QR base con alta calidad
-      // Ajustar tamaño del QR para que encaje en el espacio blanco central
-      // El espacio blanco parece estar en el centro, usar aproximadamente 60% del ancho de la imagen
       const qrSize = Math.min(canvasWidth * 0.5, canvasHeight * 0.4);
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
@@ -240,9 +257,7 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en el rectángulo verde/amarillo de la parte inferior
-      // El rectángulo está dentro de una barra marrón en la parte inferior
-      // Ajustar posición para que quede exactamente en el centro del rectángulo
+      // Agregar el ID del ticket en la parte inferior
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
@@ -256,175 +271,41 @@ export class TicketsService {
       // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
       const idY = canvasHeight - (canvasHeight * 0.11);
       
-      // Dibujar el ID del ticket con prefijo "ID: "
-      ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      if (ticketId) {
+        ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      }
 
-      // Retornar la imagen combinada como PNG
+      console.log(`   ✅ QR Backstage generado exitosamente`);
       return canvas.toBuffer('image/png');
     } catch (error) {
-      console.error('Error generando QR Free con imagen de fondo:', error);
+      console.error('Error generando QR Backstage con imagen de fondo:', error);
       // Fallback: generar QR simple si falla
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
   }
 
-  private async generateAfterQr(
+  private async generateBirthdayQr(
     qrData: string,
     ticketId: string,
     eventName?: string,
   ): Promise<Buffer> {
     try {
-      console.log('🎨 Generando QR After con textos:', { ticketId, eventName: eventName || 'NO PROPORCIONADO' });
+      // Cargar la imagen de fondo desde public/qrs/qr_cumpleaños.jpg
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_cumpleaños.jpg');
       
-      // Generar QR base con alta calidad
-      const qrSize = 300;
-      const qrBuffer = await QRCode.toBuffer(qrData, {
-        type: 'png',
-        width: qrSize,
-        margin: 2,
-        color: {
-          dark: '#1a0d2e',
-          light: '#ffffff',
-        },
-        errorCorrectionLevel: 'H',
-      });
-
-      // Dimensiones del poster After
-      const canvasWidth = 600;
-      const canvasHeight = 800;
-
-      const canvas = createCanvas(canvasWidth, canvasHeight);
-      const ctx = canvas.getContext('2d');
-
-      // Configurar contexto de texto
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-
-      // === FONDO CON GRADIENTE MORADO/VIOLETA NOCTURNO ===
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-      gradient.addColorStop(0, '#2d1b4e'); // Morado oscuro en la parte superior
-      gradient.addColorStop(0.5, '#4a2c6b'); // Morado medio
-      gradient.addColorStop(1, '#1a0d2e'); // Morado muy oscuro en la parte inferior
-
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // === QR CENTRADO ===
-      const qrX = (canvasWidth - qrSize) / 2;
-      const qrY = (canvasHeight - qrSize) / 2;
-
-      // Fondo circular blanco para el QR
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(canvasWidth / 2, canvasHeight / 2, qrSize / 2 + 20, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Sombra del QR
-      ctx.shadowColor = 'rgba(139, 92, 246, 0.4)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 5;
-
-      const qrImage = await loadImage(qrBuffer);
-      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
-
-      // Resetear sombra
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
-      // === ELEMENTOS DECORATIVOS NOCTURNOS (primero los decorativos) ===
-      this.drawAfterElements(ctx, canvasWidth, canvasHeight);
-
-      // === ESTRELLAS FLOTANTES ===
-      this.drawStars(ctx, canvasWidth, canvasHeight);
-
-      // === TEXTO PROFESIONAL (después de los decorativos para que quede encima) ===
-      // IMPORTANTE: Dibujar textos DESPUÉS del QR y decorativos
-      
-      const displayEventName = eventName || 'EVENTO';
-      
-      // Resetear configuración de texto
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-      
-      // 1. FONDO Y NOMBRE DEL EVENTO (parte superior)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(20, 30, canvasWidth - 40, 60);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 26px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(167, 139, 250, 1)';
-      ctx.shadowBlur = 12;
-      const eventText = displayEventName.length > 26 ? displayEventName.substring(0, 23) + '...' : displayEventName;
-      ctx.fillText(eventText.toUpperCase(), canvasWidth / 2, 50);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto evento dibujado:', eventText);
-
-      // 2. FONDO Y TEXTO "AFTER" (muy grande y visible)
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
-      ctx.fillRect(canvasWidth / 2 - 140, 105, 280, 60);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 52px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 15;
-      ctx.fillText('AFTER', canvasWidth / 2, 115);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto AFTER dibujado');
-
-      // 3. FONDO Y TICKET ID (parte inferior)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(20, canvasHeight - 110, canvasWidth - 40, 80);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(196, 181, 253, 1)';
-      ctx.shadowBlur = 8;
-      const idText = `ID: ${ticketId.toUpperCase()}`;
-      ctx.fillText(idText, canvasWidth / 2, canvasHeight - 80);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto ID dibujado:', idText);
-
-      // 4. FEST-GO branding
-      ctx.fillStyle = '#c4b5fd';
-      ctx.font = 'bold 20px Arial, sans-serif';
-      ctx.shadowColor = 'rgba(139, 92, 246, 0.8)';
-      ctx.shadowBlur = 6;
-      ctx.fillText('FEST-GO', canvasWidth / 2, canvasHeight - 40);
-      ctx.shadowBlur = 0;
-      console.log('✅ Texto FEST-GO dibujado');
-      
-      console.log('✅ QR After generado exitosamente con todos los textos');
-
-      return canvas.toBuffer('image/png');
-    } catch (error) {
-      console.error('Error generando QR After, usando QR normal:', error);
-      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
-    }
-  }
-
-  private async generateBackstageQr(
-    qrData: string,
-    ticketId: string,
-    eventName?: string,
-  ): Promise<Buffer> {
-    try {
-      // Cargar la imagen de fondo desde public/qrs/qr_backstage.jpg
-      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_backstage.jpg');
+      console.log(`   📷 Cargando imagen Cumpleaños: ${backgroundImagePath}`);
       
       if (!fs.existsSync(backgroundImagePath)) {
         console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
-        throw new Error('Imagen de fondo QR Backstage no encontrada');
+        throw new Error('Imagen de fondo QR Cumpleaños no encontrada');
       }
 
       // Cargar imagen de fondo
       const backgroundImage = await loadImage(backgroundImagePath);
       const canvasWidth = backgroundImage.width;
       const canvasHeight = backgroundImage.height;
+
+      console.log(`   ✅ Imagen Cumpleaños cargada: ${canvasWidth}x${canvasHeight}`);
 
       // Crear canvas con las dimensiones de la imagen de fondo
       const canvas = createCanvas(canvasWidth, canvasHeight);
@@ -434,7 +315,6 @@ export class TicketsService {
       ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
 
       // Generar QR base con alta calidad
-      // Ajustar tamaño del QR para que encaje en el espacio blanco central
       const qrSize = Math.min(canvasWidth * 0.5, canvasHeight * 0.4);
       const qrBuffer = await QRCode.toBuffer(qrData, {
         type: 'png',
@@ -454,11 +334,11 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en su posición específica
+      // Agregar el ID del ticket en la parte inferior
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Tamaño de fuente ajustado para que encaje bien
+      // Tamaño de fuente más grande para mejor visibilidad
       const fontSize = Math.round(canvasWidth * 0.045);
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
@@ -468,100 +348,94 @@ export class TicketsService {
       // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
       const idY = canvasHeight - (canvasHeight * 0.11);
       
-      ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      if (ticketId) {
+        ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      }
 
+      console.log(`   ✅ QR Cumpleaños generado exitosamente`);
       return canvas.toBuffer('image/png');
     } catch (error) {
-      console.error('Error generando QR Backstage con imagen de fondo:', error);
+      console.error('Error generando QR Cumpleaños con imagen de fondo:', error);
       // Fallback: generar QR simple si falla
       return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
   }
 
-  // === FUNCIONES AUXILIARES PARA DISEÑO BACKSTAGE ===
-  
-  private drawBackstageElements(ctx: any, canvasWidth: number, canvasHeight: number) {
-    const centerY = canvasHeight / 2;
-    
-    // Colores rojos para elementos exclusivos
-    const redColors = ['#dc2626', '#ef4444', '#f87171', '#fca5a5'];
-    
-    // Dibujar candados decorativos en los costados
-    // Lado izquierdo - candados
-    for (let i = 0; i < 4; i++) {
-      const y = centerY - 120 + (i * 60);
-      const color = redColors[i % redColors.length];
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
+  private async generateAfterQr(
+    qrData: string,
+    ticketId: string,
+    eventName?: string,
+  ): Promise<Buffer> {
+    try {
+      // Cargar la imagen de fondo desde public/qrs/qr_after.jpg
+      const backgroundImagePath = path.join(process.cwd(), 'public', 'qrs', 'qr_after.jpg');
       
-      // Dibujar candado simple (rectángulo con arco)
-      ctx.beginPath();
-      ctx.rect(40, y, 30, 40);
-      ctx.fill();
+      console.log(`   📷 Cargando imagen After: ${backgroundImagePath}`);
       
-      // Arco del candado
-      ctx.beginPath();
-      ctx.arc(55, y, 15, 0, Math.PI);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      if (!fs.existsSync(backgroundImagePath)) {
+        console.error(`Imagen de fondo no encontrada en: ${backgroundImagePath}`);
+        throw new Error('Imagen de fondo QR After no encontrada');
+      }
+
+      // Cargar imagen de fondo
+      const backgroundImage = await loadImage(backgroundImagePath);
+      const canvasWidth = backgroundImage.width;
+      const canvasHeight = backgroundImage.height;
+
+      console.log(`   ✅ Imagen After cargada: ${canvasWidth}x${canvasHeight}`);
+
+      // Crear canvas con las dimensiones de la imagen de fondo
+      const canvas = createCanvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Dibujar la imagen de fondo
+      ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
+
+      // Generar QR base con alta calidad
+      const qrSize = Math.min(canvasWidth * 0.5, canvasHeight * 0.4);
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: Math.round(qrSize),
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'H',
+      });
+
+      // Colocar QR en el centro (donde está el espacio blanco)
+      const qrX = (canvasWidth - qrSize) / 2;
+      const qrY = (canvasHeight - qrSize) / 2;
+
+      const qrImage = await loadImage(qrBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // Agregar el ID del ticket en la parte inferior
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       
-      ctx.shadowBlur = 0;
+      // Tamaño de fuente más grande para mejor visibilidad
+      const fontSize = Math.round(canvasWidth * 0.045);
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
+      
+      // Posición centrada horizontalmente
+      const idX = canvasWidth / 2;
+      // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.11);
+      
+      if (ticketId) {
+        ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      }
+
+      console.log(`   ✅ QR After generado exitosamente`);
+      return canvas.toBuffer('image/png');
+    } catch (error) {
+      console.error('Error generando QR After con imagen de fondo:', error);
+      // Fallback: generar QR simple si falla
+      return await QRCode.toBuffer(qrData, { type: 'png', width: 400, margin: 2 });
     }
-    
-    // Lado derecho - llaves
-    for (let i = 0; i < 4; i++) {
-      const y = centerY - 120 + (i * 60);
-      const color = redColors[i % redColors.length];
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
-      
-      // Dibujar llave simple
-      const keyX = canvasWidth - 70;
-      ctx.beginPath();
-      // Cabeza de la llave (círculo)
-      ctx.arc(keyX + 10, y + 20, 8, 0, Math.PI * 2);
-      ctx.fill();
-      // Cuerpo de la llave
-      ctx.fillRect(keyX + 10, y + 28, 4, 20);
-      // Dientes de la llave
-      ctx.fillRect(keyX + 8, y + 35, 8, 4);
-      
-      ctx.shadowBlur = 0;
-    }
-    
-    ctx.globalAlpha = 1;
-  }
-  
-  private drawExclusiveParticles(ctx: any, canvasWidth: number, canvasHeight: number) {
-    // Partículas flotantes rojas con efecto de resplandor
-    const particles = [
-      { x: 80, y: 150, size: 3 },
-      { x: 520, y: 180, size: 4 },
-      { x: 100, y: 650, size: 2 },
-      { x: 500, y: 680, size: 3 },
-      { x: 150, y: 400, size: 2 },
-      { x: 450, y: 420, size: 3 },
-    ];
-    
-    particles.forEach(particle => {
-      ctx.fillStyle = '#dc2626';
-      ctx.globalAlpha = 0.6;
-      ctx.shadowColor = '#dc2626';
-      ctx.shadowBlur = 8;
-      
-      ctx.beginPath();
-      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.shadowBlur = 0;
-    });
-    
-    ctx.globalAlpha = 1;
   }
 
   // === FUNCIONES AUXILIARES PARA DISEÑO AFTER ===

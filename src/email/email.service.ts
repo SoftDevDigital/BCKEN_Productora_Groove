@@ -20,6 +20,29 @@ export class EmailService {
     attachments?: any[],
     htmlBody?: string,
   ) {
+    console.log(`\n📧 [EMAIL SERVICE] Preparando email para enviar`);
+    console.log(`   Destinatario: ${to}`);
+    console.log(`   Subject: ${subject}`);
+    console.log(`   Adjuntos recibidos: ${attachments?.length || 0}`);
+    
+    if (attachments && attachments.length > 0) {
+      console.log(`\n   📎 Detalles de adjuntos recibidos:`);
+      attachments.forEach((att, idx) => {
+        console.log(`      ${idx + 1}. ${att.filename || 'Sin nombre'}`);
+        console.log(`         - Tipo: ${att.type || 'N/A'}`);
+        console.log(`         - Disposition: ${att.disposition || 'N/A'}`);
+        console.log(`         - Tamaño base64: ${att.content?.length || 0} caracteres`);
+        console.log(`         - ContentId: ${att.contentId || att.content_id || 'N/A'}`);
+        if (att.content && att.content.length > 0) {
+          console.log(`         - Primeros 30 chars: ${att.content.substring(0, 30)}...`);
+        } else {
+          console.log(`         - ⚠️ CONTENIDO VACÍO!`);
+        }
+      });
+    } else {
+      console.log(`   ⚠️ No se recibieron adjuntos!`);
+    }
+    
     const msg: any = {
       to,
       from:
@@ -27,15 +50,57 @@ export class EmailService {
         'no-reply@fest-go.com',
       subject,
       text: body,
-      attachments,
     };
+    
     if (htmlBody) {
       msg.html = htmlBody;
+      console.log(`   HTML Body: ${htmlBody.length} caracteres`);
     }
+    
+    if (attachments && attachments.length > 0) {
+      console.log(`\n   🔧 Formateando adjuntos para SendGrid...`);
+      // SendGrid espera el formato correcto de attachments
+      msg.attachments = attachments.map((att, idx) => {
+        const attachment: any = {
+          content: att.content,
+          filename: att.filename || `attachment-${idx + 1}.png`,
+          type: att.type || 'image/png',
+          disposition: att.disposition || 'attachment',
+        };
+        // SendGrid usa content_id (con guion bajo) para referencias inline
+        if (att.contentId || att.content_id) {
+          attachment.content_id = att.contentId || att.content_id;
+        }
+        console.log(`      ✅ Adjunto ${idx + 1} formateado: ${attachment.filename}`);
+        return attachment;
+      });
+      console.log(`   ✅ ${msg.attachments.length} adjunto(s) configurado(s) para SendGrid`);
+      console.log(`   📋 Formato final:`, JSON.stringify(msg.attachments.map(a => ({
+        filename: a.filename,
+        type: a.type,
+        disposition: a.disposition,
+        hasContent: !!a.content,
+        contentLength: a.content?.length || 0,
+        hasContentId: !!a.content_id,
+      })), null, 2));
+    } else {
+      console.log(`   ⚠️ No se agregaron adjuntos al mensaje!`);
+    }
+    
+    console.log(`\n   🚀 Enviando email a SendGrid...`);
     try {
-      await SendGrid.send(msg);
+      const result = await SendGrid.send(msg);
+      console.log(`   ✅ Email enviado exitosamente a SendGrid`);
+      console.log(`      Response status: ${result[0]?.statusCode || 'N/A'}`);
+      console.log(`      Headers:`, JSON.stringify(result[0]?.headers || {}, null, 2));
       return { success: true, message: 'Email sent successfully' };
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`\n   ❌ ERROR al enviar email a SendGrid:`);
+      console.error(`      Mensaje: ${error.message}`);
+      console.error(`      Stack: ${error.stack}`);
+      if (error.response) {
+        console.error(`      Response body:`, JSON.stringify(error.response.body, null, 2));
+      }
       throw new Error(`Failed to send email: ${error.message}`);
     }
   }

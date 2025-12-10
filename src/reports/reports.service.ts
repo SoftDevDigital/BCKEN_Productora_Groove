@@ -75,7 +75,9 @@ export class ReportsService {
             vipTicketsSold += sale.quantity || 0;
             vipSalesCount += 1;
           }
-          if (batch?.isBackstage) {
+          // Backstage viene de la venta (sale.isBackstage), NO del batch
+          // Backstage es una asignación especial del admin, similar a Free/Cumpleaños
+          if (sale.isBackstage === true) {
             backstageTicketsSold += sale.quantity || 0;
             backstageSalesCount += 1;
           }
@@ -120,14 +122,16 @@ export class ReportsService {
           salesByEvent[eventId].freeSales += 1;
         }
         
-        // Obtener batch para determinar tipo VIP/Backstage/After
+        // Obtener batch para determinar tipo VIP/After
+        // Backstage viene de la venta (sale.isBackstage), NO del batch
         try {
           const batch = await this.batchesService.findOne(eventId, sale.batchId);
           if (batch?.isVip) {
             salesByEvent[eventId].vipTickets += sale.quantity || 0;
             salesByEvent[eventId].vipSales += 1;
           }
-          if (batch?.isBackstage) {
+          // Backstage es una asignación especial del admin, similar a Free/Cumpleaños
+          if (sale.isBackstage === true) {
             salesByEvent[eventId].backstageTickets += sale.quantity || 0;
             salesByEvent[eventId].backstageSales += 1;
           }

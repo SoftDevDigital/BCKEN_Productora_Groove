@@ -226,23 +226,19 @@ export class SalesService {
         );
         const isVip = batch?.isVip || false;
         const isAfter = batch?.isAfter || false;
-        const isBackstage = batch?.isBackstage || false;
         
         // Determinar tipo de entrada para mostrar en el email
         let ticketType = 'General';
         if (isVip) {
           ticketType = 'VIP';
-        } else if (isBackstage) {
-          ticketType = 'Backstage';
         } else if (isAfter) {
           ticketType = 'After';
         }
         
         // Buscar si existe un batch "after" para el mismo evento (fiesta + after)
-        // IMPORTANTE: NO buscar batch After si es Backstage (Backstage es independiente)
         let afterBatch: any = null;
-        if (!isAfter && !isBackstage) {
-          // Solo buscar batch after si el batch actual NO es after y NO es backstage
+        if (!isAfter) {
+          // Solo buscar batch after si el batch actual NO es after
           try {
             const allBatches = await this.batchesService.findAll(sale.Item.eventId);
             afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
@@ -258,12 +254,10 @@ export class SalesService {
             // Continuar sin batch after si hay error
             afterBatch = null;
           }
-        } else if (isBackstage) {
-          console.log('Es Backstage, no se buscará batch After (Backstage es independiente)');
         }
         
         // Crear tickets para el batch principal (fiesta)
-        console.log('Creando tickets para venta (fiesta):', { saleId, isVip, isBackstage, isAfter: false });
+        console.log('Creando tickets para venta (fiesta):', { saleId, isVip, isAfter: false });
         const tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -271,7 +265,6 @@ export class SalesService {
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
-          isBackstage,
           isAfter: false, // El batch principal nunca es after
         });
         let ticketIds = tickets.map((ticket) => ticket.ticketId);
@@ -333,54 +326,129 @@ export class SalesService {
         // Combinar todos los tickets (fiesta + after si existe)
         const allTickets = [...tickets, ...afterTickets];
         
-        // Obtener QR attachments para todos los tickets
-        const qrAttachments = await Promise.all(
-          allTickets.map(async (ticket, index) => {
-            try {
-              const qrKey = ticket.qrS3Url
-                .split('.amazonaws.com/')[1]
-                .replace(/^\/+/, ''); // Remove leading slashes
-              const s3Response = await this.s3Client.send(
-                new GetObjectCommand({
-                  Bucket:
-                    this.configService.get<string>('S3_BUCKET') ||
-                    'ticket-qr-bucket-dev-v2',
-                  Key: qrKey,
-                }),
-              );
-              if (!s3Response.Body) {
-                throw new Error(
-                  `No body returned for QR code with key: ${qrKey}`,
-                );
+        console.log(`\n📦 [SALES SERVICE] Preparando QR attachments para email (venta pagada)`);
+        console.log(`   Total tickets a adjuntar: ${allTickets.length}`);
+        console.log(`   - Tickets fiesta: ${tickets.length}`);
+        console.log(`   - Tickets after: ${afterTickets.length}`);
+        
+        // Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+        const qrAttachments: any[] = [];
+        
+        if (allTickets.length === 0) {
+          console.warn(`   ⚠️ No hay tickets para adjuntar!`);
+        } else {
+          await Promise.all(
+            allTickets.map(async (ticket, index) => {
+              try {
+                console.log(`\n   📥 [Ticket ${index + 1}/${allTickets.length}] Obteniendo QR desde S3`);
+                console.log(`      Ticket ID: ${ticket.ticketId}`);
+                console.log(`      URL original: ${ticket.qrS3Url}`);
+                
+                // Extraer la key de S3 desde la URL
+                let qrKey: string;
+                if (ticket.qrS3Url.includes('.amazonaws.com/')) {
+                  qrKey = ticket.qrS3Url.split('.amazonaws.com/')[1].replace(/^\/+/, '');
+                } else if (ticket.qrS3Url.includes('s3://')) {
+                  qrKey = ticket.qrS3Url.replace('s3://', '').split('/').slice(1).join('/');
+                } else {
+                  // Asumir que ya es una key
+                  qrKey = ticket.qrS3Url.replace(/^https?:\/\/[^\/]+\//, '');
+                }
+                
+                console.log(`      ✅ Key extraída: ${qrKey}`);
+                
+                const bucket = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
+                
+                // Intentar descargar desde S3 usando GetObjectCommand primero
+                let buffer: Buffer;
+                try {
+                  console.log(`      📤 Descargando desde S3 usando GetObjectCommand...`);
+                  console.log(`         Bucket: ${bucket}`);
+                  console.log(`         Key: ${qrKey}`);
+                  
+                  const s3Response = await this.s3Client.send(
+                    new GetObjectCommand({
+                      Bucket: bucket,
+                      Key: qrKey,
+                    }),
+                  );
+                  
+                  if (!s3Response.Body) {
+                    throw new Error(`No body returned for QR code with key: ${qrKey}`);
+                  }
+                  
+                  const body = await s3Response.Body.transformToByteArray();
+                  buffer = Buffer.from(body);
+                  console.log(`      ✅ QR descargado exitosamente desde S3 (GetObjectCommand)`);
+                } catch (s3Error: any) {
+                  // Si falla por permisos, intentar descargar desde la URL pública
+                  if (s3Error.name === 'AccessDenied' || s3Error.message?.includes('not authorized')) {
+                    console.log(`      ⚠️ Acceso denegado a S3, intentando descargar desde URL pública...`);
+                    console.log(`         URL: ${ticket.qrS3Url}`);
+                    
+                    try {
+                      const fetchResponse = await fetch(ticket.qrS3Url);
+                      if (!fetchResponse.ok) {
+                        throw new Error(`Failed to fetch QR from public URL: ${fetchResponse.statusText}`);
+                      }
+                      const arrayBuffer = await fetchResponse.arrayBuffer();
+                      buffer = Buffer.from(arrayBuffer);
+                      console.log(`      ✅ QR descargado exitosamente desde URL pública`);
+                    } catch (fetchError: any) {
+                      throw new Error(`Failed to download QR from S3 and public URL: ${s3Error.message} | ${fetchError.message}`);
+                    }
+                  } else {
+                    throw s3Error;
+                  }
+                }
+                
+                console.log(`      ✅ QR descargado exitosamente`);
+                console.log(`         Tamaño del buffer: ${buffer.length} bytes`);
+                
+                // Determinar prefijo del nombre del archivo según el tipo
+                const isAfterTicket = afterTickets.some(at => at.ticketId === ticket.ticketId);
+                const prefix = isAfterTicket ? 'after' : (isVip ? 'vip' : 'general');
+                
+                const base64Content = buffer.toString('base64');
+                const attachment = {
+                  content: base64Content,
+                  filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
+                  type: 'image/png',
+                  disposition: 'attachment',
+                  contentId: `qr-${ticket.ticketId}`,
+                };
+                
+                console.log(`      📎 Adjunto preparado:`);
+                console.log(`         Filename: ${attachment.filename}`);
+                console.log(`         Type: ${attachment.type}`);
+                console.log(`         Disposition: ${attachment.disposition}`);
+                console.log(`         Tamaño base64: ${attachment.content.length} caracteres`);
+                
+                qrAttachments.push(attachment);
+                console.log(`      ✅ Adjunto agregado a la lista`);
+              } catch (qrError: any) {
+                console.error(`\n      ❌ ERROR al obtener QR para ticket ${ticket.ticketId}:`);
+                console.error(`         Mensaje: ${qrError.message}`);
+                console.error(`         Stack: ${qrError.stack}`);
+                // Continuar sin este QR, pero loguear el error
               }
-              const body = await s3Response.Body.transformToByteArray();
-              const buffer = Buffer.from(body);
-              
-              // Determinar prefijo del nombre del archivo según el tipo
-              const isAfterTicket = afterTickets.some(at => at.ticketId === ticket.ticketId);
-              const prefix = isAfterTicket ? 'after' : 'fiesta';
-              
-              return {
-                content: buffer.toString('base64'),
-                filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
-                type: 'image/png',
-                disposition: 'attachment',
-                contentId: `qr-${ticket.ticketId}`,
-              };
-            } catch (error) {
-              console.error(
-                `Error fetching QR code for ticket ${ticket.ticketId}:`,
-                error,
-              );
-              throw new HttpException(
-                `Failed to fetch QR code for ticket ${ticket.ticketId}: ${error.message}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
-              );
-            }
-          }),
-        );
-        // Mensaje sobre los QR según si hay batch after (pero NO si es Backstage)
-        const qrMessage = afterBatch && !isBackstage
+            }),
+          );
+        }
+        
+        console.log(`\n   📊 Resumen de adjuntos:`);
+        console.log(`      Total preparados: ${qrAttachments.length} de ${allTickets.length} tickets`);
+        
+        if (qrAttachments.length === 0) {
+          console.warn(`      ⚠️ No se pudo obtener ningún QR code para adjuntar al email`);
+        } else {
+          console.log(`      ✅ ${qrAttachments.length} QR(s) listo(s) para adjuntar al email`);
+          qrAttachments.forEach((att, idx) => {
+            console.log(`         ${idx + 1}. ${att.filename} (${att.content.length} chars base64)`);
+          });
+        }
+        // Mensaje sobre los QR según si hay batch after
+        const qrMessage = afterBatch 
           ? `**Códigos QR Únicos**
 Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
 Todos los códigos QR están adjuntos en este correo.`
@@ -392,9 +460,9 @@ Hola ${user.alias || 'Usuario'},
 Tu compra ha sido confirmada exitosamente.
 **Comprobante de Pago**
 - Venta ID: ${saleId}
-- Tipo de entrada: ${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}
+- Tipo de entrada: ${ticketType}${afterBatch ? ' + After Party' : ''}
 - Evento: ${event?.name || 'Desconocido'}
-- Tanda: ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}
+- Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
 - Cantidad de tickets: ${sale.Item.quantity}
 - Precio por ticket: $${sale.Item.basePrice}
 - Comisión: $${sale.Item.commission}
@@ -482,7 +550,7 @@ Equipo FEST-GO
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td>
                     </tr>
                     <tr>
-                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}</span></td>
+                      <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}</span></td>
                     </tr>
                     <tr>
                       <td class="text" style="color:#e5e7eb; padding:8px 0;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}</td>
@@ -510,7 +578,7 @@ Equipo FEST-GO
                   </table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    ${afterBatch && !isBackstage
+                    ${afterBatch 
                       ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos como imágenes.`
                       : `Los códigos QR están adjuntos como imágenes. Cada ticket tiene su QR único.`}
                   </p>
@@ -557,7 +625,17 @@ Equipo FEST-GO
 </html>
         `;
 
-        console.log('Enviando email a:', user.email);
+        console.log('\n📧 [CONFIRM SALE] Preparando envío de email...');
+        console.log(`   Email destino: ${user.email}`);
+        console.log(`   Attachments a enviar: ${qrAttachments.length}`);
+        if (qrAttachments.length > 0) {
+          qrAttachments.forEach((att, idx) => {
+            console.log(`      ${idx + 1}. ${att.filename} - Content length: ${att.content?.length || 0} chars`);
+          });
+        } else {
+          console.warn(`   ⚠️ NO HAY ATTACHMENTS PARA ENVIAR!`);
+        }
+        
         await this.emailService.sendConfirmationEmail(
           user.email,
           `Confirmación de Compra - ${event?.name || 'Evento'}`,
@@ -657,7 +735,7 @@ Equipo FEST-GO
     resellerEmail: string,
   ) {
     const saleId = uuidv4();
-    const { eventId, batchId, quantity, buyerEmailOrAlias, isBirthday, birthdayPersonName } = createFreeSaleDto;
+    const { eventId, batchId, quantity, buyerEmailOrAlias, isBirthday, birthdayPersonName, isBackstage } = createFreeSaleDto;
 
     try {
       // 1. Validar que el usuario comprador existe
@@ -761,6 +839,7 @@ Equipo FEST-GO
           status: 'approved', // Aprobado inmediatamente (sin pago)
           isFree: true, // Marcar como gratis
           isBirthday: isBirthday || false, // Indica si es cumpleañero
+          isBackstage: isBackstage || false, // Indica si es ticket Backstage (asignación especial del admin)
           birthdayPersonName: birthdayPersonName || null, // Nombre del cumpleañero
           createdBy: resellerId, // Quién generó este ticket gratis
           createdByEmail: resellerEmail, // Email de quien generó
@@ -868,13 +947,12 @@ Equipo FEST-GO
         );
       }
 
-      // 2. Obtener batch para verificar si es VIP, Backstage o After (también se usa para el email)
+      // 2. Obtener batch para verificar si es VIP o After (también se usa para el email)
       let isVip = false;
-      let isBackstage = false;
       let isAfter = false;
       let batch;
       try {
-        console.log('Obteniendo tanda para verificar VIP/Backstage/After (venta gratis):', {
+        console.log('Obteniendo tanda para verificar VIP/After (venta gratis):', {
           eventId: sale.Item.eventId,
           batchId: sale.Item.batchId,
         });
@@ -883,13 +961,10 @@ Equipo FEST-GO
           sale.Item.batchId,
         );
         isVip = batch?.isVip || false;
-        isBackstage = batch?.isBackstage || false;
         isAfter = batch?.isAfter || false;
       } catch (batchError: any) {
-        console.error('Error al obtener batch, asumiendo no VIP/Backstage/After:', batchError.message);
+        console.error('Error al obtener batch, asumiendo no VIP/After:', batchError.message);
         batch = { name: 'Tanda' }; // Valor por defecto para el email
-        isVip = false;
-        isBackstage = false;
         isAfter = false;
       }
 
@@ -908,10 +983,9 @@ Equipo FEST-GO
       }
 
       // 3.5. Buscar si existe un batch "after" para el mismo evento (fiesta + after)
-      // IMPORTANTE: NO buscar batch After si es Backstage (Backstage es independiente)
       let afterBatch: any = null;
-      if (!isAfter && !isBackstage) {
-        // Solo buscar batch after si el batch actual NO es after y NO es backstage
+      if (!isAfter) {
+        // Solo buscar batch after si el batch actual NO es after
         try {
           const allBatches = await this.batchesService.findAll(sale.Item.eventId);
           afterBatch = allBatches.find((b: any) => b.isAfter === true) || null;
@@ -927,8 +1001,6 @@ Equipo FEST-GO
           // Continuar sin batch after si hay error
           afterBatch = null;
         }
-      } else if (isBackstage) {
-        console.log('Es Backstage, no se buscará batch After (Backstage es independiente)');
       }
 
       // 4. Crear tickets con diseño mejorado para QR free (fiesta)
@@ -936,7 +1008,7 @@ Equipo FEST-GO
       let ticketIds: string[] = [];
       let afterTickets: Array<{ ticketId: string; saleId: string; qrS3Url: string }> = [];
       try {
-        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isBackstage, isAfter: false, eventName: event?.name, isBirthday: sale.Item.isBirthday });
+        console.log('Creando tickets para venta gratis (fiesta):', { saleId, isVip, isAfter: false, eventName: event?.name, isBirthday: sale.Item.isBirthday, isBackstage: sale.Item.isBackstage });
         tickets = await this.ticketsService.createTickets({
           id: saleId,
           userId: sale.Item.userId,
@@ -944,16 +1016,20 @@ Equipo FEST-GO
           batchId: sale.Item.batchId,
           quantity: sale.Item.quantity,
           isVip,
-          isBackstage,
           isAfter: false, // El batch principal nunca es after
           isFree: true, // Marcar como ticket gratis para usar diseño especial
           isBirthday: sale.Item.isBirthday || false, // Pasar si es cumpleaños
+          isBackstage: sale.Item.isBackstage || false, // Pasar si es backstage
           eventName: event?.name, // Pasar nombre del evento para el QR
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
         
-        // Si existe batch after, crear tickets adicionales para el after
-        if (afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
+        // IMPORTANTE: NO crear tickets After si es cumpleaños o backstage (son tickets independientes)
+        const isBirthdayForAfter = sale.Item.isBirthday || false;
+        const isBackstageForAfter = sale.Item.isBackstage || false;
+        
+        // Si existe batch after, crear tickets adicionales para el after (solo si NO es cumpleaños ni backstage)
+        if (!isBirthdayForAfter && !isBackstageForAfter && afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
           try {
             console.log('Creando tickets para After Party (venta gratis):', {
               saleId,
@@ -1020,53 +1096,137 @@ Equipo FEST-GO
       }
 
       // 6. Combinar todos los tickets (fiesta + after si existe)
-      const allTickets = [...tickets, ...(afterBatch ? afterTickets : [])];
+      // IMPORTANTE: NO incluir afterTickets si es cumpleaños o backstage
+      const isBirthdayForTickets = sale.Item.isBirthday || false;
+      const isBackstageForTickets = sale.Item.isBackstage || false;
+      const allTickets = isBirthdayForTickets || isBackstageForTickets 
+        ? [...tickets] 
+        : [...tickets, ...(afterBatch ? afterTickets : [])];
+      
+      // 7. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
+      console.log(`\n📦 [SALES SERVICE] Preparando QR attachments para email (venta gratis)`);
+      console.log(`   Total tickets a adjuntar: ${allTickets.length}`);
+      console.log(`   - Tickets fiesta: ${tickets.length}`);
+      console.log(`   - Tickets after: ${afterBatch ? afterTickets.length : 0}`);
       
       // 7. Obtener QR attachments (si falla algún QR, continuar con los que sí funcionen)
       const qrAttachments: any[] = [];
-      await Promise.all(
-        allTickets.map(async (ticket, index) => {
-          try {
-            const qrKey = ticket.qrS3Url
-              .split('.amazonaws.com/')[1]
-              .replace(/^\/+/, '');
-            const s3Response = await this.s3Client.send(
-              new GetObjectCommand({
-                Bucket:
-                  this.configService.get<string>('S3_BUCKET') ||
-                  'ticket-qr-bucket-dev-v2',
-                Key: qrKey,
-              }),
-            );
-            if (!s3Response.Body) {
-              throw new Error(`No body returned for QR code with key: ${qrKey}`);
+      
+      if (allTickets.length === 0) {
+        console.warn(`   ⚠️ No hay tickets para adjuntar!`);
+      } else {
+        await Promise.all(
+          allTickets.map(async (ticket, index) => {
+            try {
+              console.log(`\n   📥 [Ticket ${index + 1}/${allTickets.length}] Obteniendo QR desde S3`);
+              console.log(`      Ticket ID: ${ticket.ticketId}`);
+              console.log(`      URL original: ${ticket.qrS3Url}`);
+              
+              // Extraer la key de S3 desde la URL
+              let qrKey: string;
+              if (ticket.qrS3Url.includes('.amazonaws.com/')) {
+                qrKey = ticket.qrS3Url.split('.amazonaws.com/')[1].replace(/^\/+/, '');
+              } else if (ticket.qrS3Url.includes('s3://')) {
+                qrKey = ticket.qrS3Url.replace('s3://', '').split('/').slice(1).join('/');
+              } else {
+                // Asumir que ya es una key
+                qrKey = ticket.qrS3Url.replace(/^https?:\/\/[^\/]+\//, '');
+              }
+              
+              console.log(`      ✅ Key extraída: ${qrKey}`);
+              
+              const bucket = this.configService.get<string>('S3_BUCKET') || 'ticket-qr-bucket-dev-v2';
+              
+              // Intentar descargar desde S3 usando GetObjectCommand primero
+              let buffer: Buffer;
+              try {
+                console.log(`      📤 Descargando desde S3 usando GetObjectCommand...`);
+                console.log(`         Bucket: ${bucket}`);
+                console.log(`         Key: ${qrKey}`);
+                
+                const s3Response = await this.s3Client.send(
+                  new GetObjectCommand({
+                    Bucket: bucket,
+                    Key: qrKey,
+                  }),
+                );
+                
+                if (!s3Response.Body) {
+                  throw new Error(`No body returned for QR code with key: ${qrKey}`);
+                }
+                
+                const body = await s3Response.Body.transformToByteArray();
+                buffer = Buffer.from(body);
+                console.log(`      ✅ QR descargado exitosamente desde S3 (GetObjectCommand)`);
+              } catch (s3Error: any) {
+                // Si falla por permisos, intentar descargar desde la URL pública
+                if (s3Error.name === 'AccessDenied' || s3Error.message?.includes('not authorized')) {
+                  console.log(`      ⚠️ Acceso denegado a S3, intentando descargar desde URL pública...`);
+                  console.log(`         URL: ${ticket.qrS3Url}`);
+                  
+                  try {
+                    const fetchResponse = await fetch(ticket.qrS3Url);
+                    if (!fetchResponse.ok) {
+                      throw new Error(`Failed to fetch QR from public URL: ${fetchResponse.statusText}`);
+                    }
+                    const arrayBuffer = await fetchResponse.arrayBuffer();
+                    buffer = Buffer.from(arrayBuffer);
+                    console.log(`      ✅ QR descargado exitosamente desde URL pública`);
+                  } catch (fetchError: any) {
+                    throw new Error(`Failed to download QR from S3 and public URL: ${s3Error.message} | ${fetchError.message}`);
+                  }
+                } else {
+                  throw s3Error;
+                }
+              }
+              
+              console.log(`      ✅ QR descargado exitosamente`);
+              console.log(`         Tamaño del buffer: ${buffer.length} bytes`);
+              
+              // Determinar prefijo del nombre del archivo según el tipo
+              const isAfterTicket = afterBatch && afterTickets.some(at => at.ticketId === ticket.ticketId);
+              const isBirthdayTicket = (sale.Item?.isBirthday) || false;
+              const isBackstageTicket = (sale.Item?.isBackstage) || false;
+              const prefix = isAfterTicket ? 'after' : (isBackstageTicket ? 'backstage' : (isBirthdayTicket ? 'cumpleaños' : 'free'));
+              
+              const base64Content = buffer.toString('base64');
+              const attachment = {
+                content: base64Content,
+                filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
+                type: 'image/png',
+                disposition: 'attachment',
+                contentId: `qr-${ticket.ticketId}`,
+              };
+              
+              console.log(`      📎 Adjunto preparado:`);
+              console.log(`         Filename: ${attachment.filename}`);
+              console.log(`         Type: ${attachment.type}`);
+              console.log(`         Disposition: ${attachment.disposition}`);
+              console.log(`         Tamaño base64: ${attachment.content.length} caracteres`);
+              console.log(`         Primeros 50 chars base64: ${attachment.content.substring(0, 50)}...`);
+              
+              qrAttachments.push(attachment);
+              console.log(`      ✅ Adjunto agregado a la lista`);
+            } catch (qrError: any) {
+              console.error(`\n      ❌ ERROR al obtener QR para ticket ${ticket.ticketId}:`);
+              console.error(`         Mensaje: ${qrError.message}`);
+              console.error(`         Stack: ${qrError.stack}`);
+              // Continuar sin este QR, pero loguear el error
             }
-            const body = await s3Response.Body.transformToByteArray();
-            const buffer = Buffer.from(body);
-            
-            // Determinar prefijo del nombre del archivo según el tipo
-            const isAfterTicket = afterBatch && afterTickets.some(at => at.ticketId === ticket.ticketId);
-            const prefix = isAfterTicket ? 'after' : 'fiesta';
-            
-            qrAttachments.push({
-              content: buffer.toString('base64'),
-              filename: `${prefix}-ticket-${index + 1}-${ticket.ticketId}.png`,
-              type: 'image/png',
-              disposition: 'attachment',
-              contentId: `qr-${ticket.ticketId}`,
-            });
-          } catch (qrError: any) {
-            console.error(
-              `Error fetching QR code for ticket ${ticket.ticketId}:`,
-              qrError.message,
-            );
-            // Continuar sin este QR, pero loguear el error
-          }
-        }),
-      );
+          }),
+        );
+      }
+      
+      console.log(`\n   📊 Resumen de adjuntos:`);
+      console.log(`      Total preparados: ${qrAttachments.length} de ${allTickets.length} tickets`);
       
       if (qrAttachments.length === 0) {
-        console.warn('No se pudo obtener ningún QR code para adjuntar al email');
+        console.warn(`      ⚠️ No se pudo obtener ningún QR code para adjuntar al email`);
+      } else {
+        console.log(`      ✅ ${qrAttachments.length} QR(s) listo(s) para adjuntar al email`);
+        qrAttachments.forEach((att, idx) => {
+          console.log(`         ${idx + 1}. ${att.filename} (${att.content.length} chars base64)`);
+        });
       }
 
       // 6. Obtener nombre del revendedor (simplificado - usar email o intentar desde Cognito)
@@ -1099,18 +1259,29 @@ Equipo FEST-GO
       } else {
         try {
           // Determinar tipo de entrada para mostrar en el email
+          const isBirthdayForEmail = sale.Item.isBirthday || false;
+          const isBackstageForEmail = sale.Item.isBackstage || false;
           let ticketType = 'General';
-          if (isVip) {
-            ticketType = 'VIP';
-          } else if (isBackstage) {
+          if (isBackstageForEmail) {
             ticketType = 'Backstage';
+          } else if (isBirthdayForEmail) {
+            ticketType = 'Cumpleaños';
+          } else if (isVip) {
+            ticketType = 'VIP';
           } else if (isAfter) {
             ticketType = 'After';
           }
           
-          // Mensaje sobre los QR según si hay batch after (pero NO si es Backstage)
-          const qrMessageFree = afterBatch && !isBackstage
+          // Mensaje sobre los QR según si hay batch after (solo si NO es cumpleaños ni backstage)
+          const shouldShowAfter = afterBatch && !isBirthdayForEmail && !isBackstageForEmail;
+          const qrMessageFree = shouldShowAfter
             ? `Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
+Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
+            : isBirthdayForEmail
+            ? `¡Feliz cumpleaños! 🎂🎉 Has recibido ${sale.Item.quantity} QR especial de cumpleaños.
+Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
+            : isBackstageForEmail
+            ? `Has recibido ${sale.Item.quantity} QR especial Backstage.
 Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
             : `Los códigos QR de tus tickets están adjuntos en este correo.
 Estos códigos QR son válidos y funcionan igual que los tickets pagos.`;
@@ -1128,9 +1299,9 @@ Este ticket ha sido generado especialmente para ti por tu revendedor. ¡Es compl
 📋 DETALLES DEL TICKET GRATUITO
 ═══════════════════════════════════════
 • Venta ID: ${saleId}
-• Tipo de entrada: ${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}
+• Tipo de entrada: ${ticketType}${shouldShowAfter ? ' + After Party' : ''}
 • Evento: ${event?.name || 'Desconocido'}
-• Tanda: ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}
+• Tanda: ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}
 • Cantidad de tickets: ${sale.Item.quantity}
 • Precio: $0.00 (GRATIS) ✨
 • Tickets: ${ticketIds.join(', ')}
@@ -1214,9 +1385,9 @@ Equipo FEST-GO
                 <td style="padding:20px 24px;">
                   <table role="presentation" width="100%" style="font-family:Arial,Helvetica,sans-serif; font-size:14px;">
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${afterBatch && !isBackstage ? ' + After Party' : ''}</span></td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${shouldShowAfter ? ' + After Party' : ''}</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch && !isBackstage ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Precio:</strong> <span style="color:#22c55e; font-weight:bold;">$0.00 (GRATIS)</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td></tr>
@@ -1225,7 +1396,7 @@ Equipo FEST-GO
                   <table role="presentation" width="100%"><tr><td style="border-top:1px solid #1f2937;" height="16"></td></tr></table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    ${afterBatch && !isBackstage
+                    ${afterBatch 
                       ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos. Funcionan igual que las entradas pagas.`
                       : `Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.`}
                   </p>
@@ -1260,12 +1431,13 @@ Equipo FEST-GO
           `;
 
           console.log('Enviando email de ticket gratis a:', userEmail);
+          // Solo enviar el QR como adjunto y un cuerpo mínimo
           await this.emailService.sendConfirmationEmail(
             userEmail,
-            `🎁 Ticket Gratuito - ${event?.name || 'Evento'}`,
-            emailBody,
+            `Tu QR Gratuito - ${event?.name || 'Evento'}`,
+            'Aquí está tu QR para el evento. Presenta este código en la entrada.',
             qrAttachments,
-            emailHtmlBody,
+            undefined // No enviar HTML ni detalles extra
           );
           console.log('Email de ticket gratis enviado exitosamente');
         } catch (emailError: any) {
