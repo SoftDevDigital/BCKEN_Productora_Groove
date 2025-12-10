@@ -1024,12 +1024,16 @@ Equipo FEST-GO
         });
         ticketIds = tickets.map((ticket) => ticket.ticketId);
         
-        // IMPORTANTE: NO crear tickets After si es cumpleaños o backstage (son tickets independientes)
+        // IMPORTANTE: NO crear tickets After si es cumpleaños, backstage o FREE simple
+        // Los tickets FREE simples son independientes y solo generan QR General
         const isBirthdayForAfter = sale.Item.isBirthday || false;
         const isBackstageForAfter = sale.Item.isBackstage || false;
+        const isFreeSimple = sale.Item.isFree && !isBirthdayForAfter && !isBackstageForAfter;
         
-        // Si existe batch after, crear tickets adicionales para el after (solo si NO es cumpleaños ni backstage)
-        if (!isBirthdayForAfter && !isBackstageForAfter && afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
+        // Si existe batch after, crear tickets adicionales para el after
+        // SOLO si NO es cumpleaños, NO es backstage, y NO es FREE simple
+        // Los tickets FREE simples son independientes y no incluyen After Party
+        if (!isBirthdayForAfter && !isBackstageForAfter && !isFreeSimple && afterBatch && afterBatch.availableTickets >= sale.Item.quantity) {
           try {
             console.log('Creando tickets para After Party (venta gratis):', {
               saleId,
@@ -1096,10 +1100,11 @@ Equipo FEST-GO
       }
 
       // 6. Combinar todos los tickets (fiesta + after si existe)
-      // IMPORTANTE: NO incluir afterTickets si es cumpleaños o backstage
+      // IMPORTANTE: NO incluir afterTickets si es cumpleaños, backstage o FREE simple
       const isBirthdayForTickets = sale.Item.isBirthday || false;
       const isBackstageForTickets = sale.Item.isBackstage || false;
-      const allTickets = isBirthdayForTickets || isBackstageForTickets 
+      const isFreeSimpleForTickets = sale.Item.isFree && !isBirthdayForTickets && !isBackstageForTickets;
+      const allTickets = isBirthdayForTickets || isBackstageForTickets || isFreeSimpleForTickets
         ? [...tickets] 
         : [...tickets, ...(afterBatch ? afterTickets : [])];
       
@@ -1272,8 +1277,9 @@ Equipo FEST-GO
             ticketType = 'After';
           }
           
-          // Mensaje sobre los QR según si hay batch after (solo si NO es cumpleaños ni backstage)
-          const shouldShowAfter = afterBatch && !isBirthdayForEmail && !isBackstageForEmail;
+          // Mensaje sobre los QR según si hay batch after (solo si NO es cumpleaños, backstage ni FREE simple)
+          const isFreeSimpleForEmail = sale.Item.isFree && !isBirthdayForEmail && !isBackstageForEmail;
+          const shouldShowAfter = afterBatch && !isBirthdayForEmail && !isBackstageForEmail && !isFreeSimpleForEmail;
           const qrMessageFree = shouldShowAfter
             ? `Has recibido ${sale.Item.quantity} QR para la fiesta y ${sale.Item.quantity} QR para el After Party (${sale.Item.quantity * 2} QR en total).
 Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
@@ -1282,6 +1288,9 @@ Todos los códigos QR están adjuntos en este correo. Estos códigos QR son vál
 Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
             : isBackstageForEmail
             ? `Has recibido ${sale.Item.quantity} QR especial Backstage.
+Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
+            : isFreeSimpleForEmail
+            ? `Has recibido ${sale.Item.quantity} QR para el evento.
 Todos los códigos QR están adjuntos en este correo. Estos códigos QR son válidos y funcionan igual que los tickets pagos.`
             : `Los códigos QR de tus tickets están adjuntos en este correo.
 Estos códigos QR son válidos y funcionan igual que los tickets pagos.`;
@@ -1387,7 +1396,7 @@ Equipo FEST-GO
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Venta ID:</strong> ${saleId}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tipo de entrada:</strong> <span style="color:#a78bfa; font-weight:bold;">${ticketType}${shouldShowAfter ? ' + After Party' : ''}</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Evento:</strong> ${event?.name || 'Desconocido'}</td></tr>
-                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${afterBatch ? ` + ${afterBatch.name || 'After Party'}` : ''}</td></tr>
+                    <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tanda:</strong> ${batch?.name || 'Desconocida'}${shouldShowAfter ? ` + ${afterBatch?.name || 'After Party'}` : ''}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Cantidad:</strong> ${sale.Item.quantity}</td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Precio:</strong> <span style="color:#22c55e; font-weight:bold;">$0.00 (GRATIS)</span></td></tr>
                     <tr><td class="text" style="padding:8px 0; color:#e5e7eb;"><strong>Tickets:</strong> ${ticketIds.join(', ')}</td></tr>
@@ -1396,8 +1405,10 @@ Equipo FEST-GO
                   <table role="presentation" width="100%"><tr><td style="border-top:1px solid #1f2937;" height="16"></td></tr></table>
 
                   <p class="text" style="margin:0 0 16px; color:#e5e7eb; font-family:Arial,Helvetica,sans-serif;">
-                    ${afterBatch 
+                    ${shouldShowAfter
                       ? `Has recibido <strong>${sale.Item.quantity} QR para la fiesta</strong> y <strong>${sale.Item.quantity} QR para el After Party</strong> (${sale.Item.quantity * 2} QR en total). Todos los códigos QR están adjuntos. Funcionan igual que las entradas pagas.`
+                      : isFreeSimpleForEmail
+                      ? `Has recibido <strong>${sale.Item.quantity} QR para el evento</strong>. Todos los códigos QR están adjuntos. Funcionan igual que las entradas pagas.`
                       : `Adjuntamos los QR únicos de tus tickets. Funcionan igual que las entradas pagas.`}
                   </p>
 
@@ -1431,13 +1442,12 @@ Equipo FEST-GO
           `;
 
           console.log('Enviando email de ticket gratis a:', userEmail);
-          // Solo enviar el QR como adjunto y un cuerpo mínimo
           await this.emailService.sendConfirmationEmail(
             userEmail,
             `Tu QR Gratuito - ${event?.name || 'Evento'}`,
-            'Aquí está tu QR para el evento. Presenta este código en la entrada.',
+            emailBody,
             qrAttachments,
-            undefined // No enviar HTML ni detalles extra
+            emailHtmlBody
           );
           console.log('Email de ticket gratis enviado exitosamente');
         } catch (emailError: any) {

@@ -677,24 +677,23 @@ export class TicketsService {
       const qrImage = await loadImage(qrBuffer);
       ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-      // Agregar el ID del ticket en el rectángulo verde/amarillo de la parte inferior
-      // El rectángulo está dentro de una barra marrón en la parte inferior
-      // Ajustar posición para que quede exactamente en el centro del rectángulo
+      // Agregar el ID del ticket en la parte inferior
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Tamaño de fuente ajustado para que encaje bien en el rectángulo
-      const fontSize = Math.round(canvasWidth * 0.035);
+      // Tamaño de fuente más grande para mejor visibilidad
+      const fontSize = Math.round(canvasWidth * 0.045);
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
       ctx.fillStyle = '#ffffff'; // Color blanco para mejor visibilidad
       
       // Posición centrada horizontalmente
       const idX = canvasWidth / 2;
-      // El rectángulo verde/amarillo está más arriba, aproximadamente a 5-6% desde la parte inferior
-      // Subir el ID para que quede dentro del rectángulo señalado
-      const idY = canvasHeight - (canvasHeight * 0.055);
+      // Ajuste fino: bajar un poco el texto, centrado en ~11% desde la parte inferior
+      const idY = canvasHeight - (canvasHeight * 0.11);
       
-      ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      if (ticketId) {
+        ctx.fillText(`ID: ${ticketId.toUpperCase()}`, idX, idY);
+      }
 
       return canvas.toBuffer('image/png');
     } catch (error) {
