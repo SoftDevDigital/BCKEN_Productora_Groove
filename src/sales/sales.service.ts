@@ -797,31 +797,7 @@ Equipo FEST-GO
         );
       }
 
-      // 3. Validar límite del 25% de tickets gratis
-      let totalEventTickets = 0;
-      let freeTicketsCount = 0;
-      try {
-        totalEventTickets = await this.getTotalEventTickets(eventId);
-        freeTicketsCount = await this.getFreeTicketsCount(eventId);
-        const maxFreeTickets = Math.floor(totalEventTickets * 0.25);
-        const freeTicketsAfterThis = freeTicketsCount + quantity;
-
-        if (freeTicketsAfterThis > maxFreeTickets) {
-          throw new HttpException(
-            `No se pueden generar más tickets gratis. Límite del 25% alcanzado (${freeTicketsCount}/${maxFreeTickets} tickets gratis ya generados). Puedes generar hasta ${maxFreeTickets - freeTicketsCount} tickets más.`,
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      } catch (limitError: any) {
-        console.error('Error al validar límite de tickets gratis:', limitError.message);
-        if (limitError instanceof HttpException) {
-          throw limitError;
-        }
-        // Si falla la validación del límite, continuar con advertencia
-        console.warn('No se pudo validar el límite del 25%, continuando...');
-      }
-
-      // 4. Crear la venta con status 'approved' y isFree: true
+      // 3. Crear la venta con status 'approved' y isFree: true
       const basePrice = batch.price || 0;
       const params: PutCommandInput = {
         TableName: this.tableName,
